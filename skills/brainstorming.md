@@ -27,5 +27,5 @@ Before writing any code for a new feature, component, or behavior change:
    - Scope check: focused enough for one implementation plan, or needs decomposition?
    - Ambiguity check: any requirement interpretable two ways? Pick one and make it explicit.
 7. **User reviews spec** — present the committed spec path and ask: "Please review it and let me know if you want any changes before I write the implementation plan." Wait for approval.
-8. When the design is approved, write the implementation plan inline to docs/superpowers/plans/YYYY-MM-DD-<topic>.md. Do NOT call use_workflow(writing_plans); that workflow is not yet available.
+8. **Transition to Writing Plans** — once the design is approved, load `use_workflow(writing-plans)` and follow it to produce the implementation plan (saved under docs/superpowers/plans/).
 **YAGNI ruthlessly:** Remove unnecessary features from every design. If it is not in the requirements, do not add it.

@@ -7,7 +7,6 @@ triggers:
   - "\\bdone\\s*(yet|already|now)\\b"
   - "did it (pass|work)"
   - "is (it|this) (fixed|working|passing)"
-  - "ready to (ship|merge|commit)"
   - "verify (the|this|that)"
 ---
 

@@ -96,7 +96,12 @@ test("loadSkills reads the real skills/ dir and parses all core skills", async (
   const pluginRoot = path.resolve(__dirname, "..");
   const skills = await loadSkills([path.join(pluginRoot, "skills")]);
   const names = skills.map(s => s.name).sort();
-  assert.deepEqual(names, ["brainstorming", "debugging", "explaining-code", "research", "tdd", "verification"]);
+  assert.deepEqual(names, [
+    "brainstorming", "code-conventions", "debugging", "executing-a-plan",
+    "explaining-code", "finishing-a-branch", "parallel-dispatch", "receiving-code-review",
+    "requesting-code-review", "research", "subagent-driven", "tdd",
+    "verification", "writing-plans",
+  ]);
 });
 
 test("loadSkills returns [] for a missing dir (graceful)", async () => {
