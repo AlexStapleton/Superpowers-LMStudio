@@ -18,6 +18,7 @@ const MODE_FILTER = process.env.EVAL_MODE || null;
 const CASE_FILTER = process.env.EVAL_CASE || null;
 const SAMPLES = Math.max(1, parseInt(process.env.EVAL_SAMPLES || "3", 10));
 const GUARDRAIL_MODE = process.env.EVAL_GUARDRAIL || "block"; // off | warn | block
+const MAX_TURNS = Math.max(1, parseInt(process.env.EVAL_MAX_TURNS || "8", 10)); // realistic exploration needs room
 
 async function main() {
   const model = process.env.EVAL_MODEL || (await probeEndpoint(BASE_URL));
@@ -56,7 +57,8 @@ async function main() {
 
   const ctx = {
     baseUrl: BASE_URL, model, judgeModel: JUDGE_MODEL, skills, skillByName,
-    samples: SAMPLES, guardrailMode: GUARDRAIL_MODE, tools: [USE_WORKFLOW_TOOL, ...STUB_TOOLS],
+    samples: SAMPLES, guardrailMode: GUARDRAIL_MODE, maxTurns: MAX_TURNS,
+    tools: [USE_WORKFLOW_TOOL, ...STUB_TOOLS],
   };
 
   const flatResults = [];

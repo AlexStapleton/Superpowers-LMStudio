@@ -39,7 +39,7 @@ async function runCase(c, ctx) {
     });
     let traj;
     try {
-      traj = await runConversation({ baseUrl: ctx.baseUrl, model: ctx.model, messages, tools: ctx.tools, executeTool });
+      traj = await runConversation({ baseUrl: ctx.baseUrl, model: ctx.model, messages, tools: ctx.tools, executeTool, maxTurns: ctx.maxTurns });
     } catch (e) {
       errors++;
       samples.push({ errored: true, error: e.message });
