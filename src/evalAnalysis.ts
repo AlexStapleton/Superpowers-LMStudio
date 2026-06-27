@@ -101,18 +101,86 @@ export function checkFirstStep(workflow: string | null, finalText: string): Chec
   return { ...base, pass: true, detail: "no heuristic" };
 }
 
-export function scoreCase(c: EvalCase, traj: Trajectory): CaseResult {
+export function scoreCase(
+  c: EvalCase,
+  traj: Trajectory,
+  adherence?: { pass: boolean; reason?: string },
+): CaseResult {
   const checks: CheckResult[] = c.checks.map(name => {
     switch (name) {
       case "announce": return checkAnnounce(traj.finalText, c.announce);
       case "toolInvoked": return checkToolInvoked(traj.toolCalls, c.workflow);
       case "noWorkflow": return checkNoWorkflow(traj.toolCalls, traj.finalText);
       case "firstStep": return checkFirstStep(c.workflow, traj.finalText);
+      case "adherence":
+        return adherence
+          ? { name: "adherence", pass: adherence.pass, soft: true, detail: adherence.reason }
+          : { name: "adherence", pass: true, soft: true, detail: "no judge" };
       default: return { name, pass: false, detail: "unknown check" };
     }
   });
   const hardPass = checks.filter(k => !k.soft).every(k => k.pass);
   return { id: c.id, workflow: c.workflow, mode: c.mode, checks, hardPass };
+}
+
+// --- Trajectory judge (B7) ---
+
+export function formatTrajectory(traj: Trajectory): string {
+  const text = traj.finalText && traj.finalText.trim() ? traj.finalText.trim() : "(no assistant text)";
+  const calls = traj.toolCalls.length
+    ? traj.toolCalls.map((c, i) => `${i + 1}. ${c.name}(${JSON.stringify(c.args)})`).join("\n")
+    : "(no tool calls)";
+  return `Assistant text:\n${text}\n\nTool calls (in order):\n${calls}`;
+}
+
+export function buildJudgePrompt(procedure: string, prompt: string, traj: Trajectory): string {
+  return [
+    "You are grading whether an AI agent followed a required workflow procedure.",
+    "",
+    "=== WORKFLOW PROCEDURE the agent was supposed to follow ===",
+    procedure,
+    "",
+    "=== USER REQUEST ===",
+    prompt,
+    "",
+    "=== WHAT THE AGENT ACTUALLY DID ===",
+    formatTrajectory(traj),
+    "",
+    "Question: Did the agent's FIRST actions follow the procedure's required first step?",
+    "Tool calls ARE actions (writing a test, exploring files, asking for info) — judge them, not just text.",
+    'Answer with ONLY a JSON object: {"follows": true or false, "reason": "<one short sentence>"}',
+  ].join("\n");
+}
+
+export function parseJudgeVerdict(text: string): { pass: boolean; reason: string } {
+  const match = text.match(/\{[^{}]*"follows"[\s\S]*?\}/);
+  if (match) {
+    try {
+      const obj = JSON.parse(match[0]);
+      return { pass: obj.follows === true, reason: String(obj.reason ?? "") };
+    } catch {
+      /* fall through */
+    }
+  }
+  return { pass: false, reason: "unparseable judge response" };
+}
+
+// --- N-sample aggregation (B6) ---
+
+export function aggregateSamples(results: CaseResult[]): { hardPassRate: number; checkRates: Record<string, number> } {
+  const n = results.length || 1;
+  const hardPassRate = results.filter(r => r.hardPass).length / n;
+  const totals: Record<string, { pass: number; total: number }> = {};
+  for (const r of results) {
+    for (const c of r.checks) {
+      totals[c.name] = totals[c.name] ?? { pass: 0, total: 0 };
+      totals[c.name].total++;
+      if (c.pass) totals[c.name].pass++;
+    }
+  }
+  const checkRates: Record<string, number> = {};
+  for (const [name, t] of Object.entries(totals)) checkRates[name] = t.pass / t.total;
+  return { hardPassRate, checkRates };
 }
 
 export function summarize(results: CaseResult[]): EvalSummary {

@@ -51,6 +51,51 @@ test("scoreCase: soft firstStep does not gate hardPass", () => {
   assert.equal(r.checks.find(k => k.name === "firstStep").pass, false);
 });
 
+const { formatTrajectory, buildJudgePrompt, parseJudgeVerdict, aggregateSamples } = require("../dist/evalAnalysis.js");
+
+test("formatTrajectory lists assistant text and tool calls in order", () => {
+  const traj = { finalText: "hello there", toolCalls: [{ name: "use_workflow", args: { workflow: "tdd" } }, { name: "save_file", args: { file_name: "a.py" } }] };
+  const s = formatTrajectory(traj);
+  assert.match(s, /hello there/);
+  assert.ok(s.indexOf("use_workflow") < s.indexOf("save_file"));
+});
+
+test("buildJudgePrompt includes procedure, prompt, and asks for a JSON follows verdict", () => {
+  const p = buildJudgePrompt("PROCEDURE_BODY", "USER_PROMPT", { finalText: "x", toolCalls: [] });
+  assert.match(p, /PROCEDURE_BODY/);
+  assert.match(p, /USER_PROMPT/);
+  assert.match(p, /follows/i);
+  assert.match(p, /json/i);
+});
+
+test("parseJudgeVerdict parses clean JSON, fenced JSON, and rejects garbage", () => {
+  assert.equal(parseJudgeVerdict('{"follows": true, "reason": "wrote a test first"}').pass, true);
+  const fenced = parseJudgeVerdict('Sure!\n```json\n{"follows": false, "reason": "jumped to a fix"}\n```');
+  assert.equal(fenced.pass, false);
+  assert.match(fenced.reason, /fix/);
+  assert.equal(parseJudgeVerdict("no json here").pass, false);
+});
+
+test("aggregateSamples computes per-check and hardPass rates", () => {
+  const mk = (hp, adh) => ({ id: "x", workflow: "tdd", mode: "router", hardPass: hp,
+    checks: [{ name: "announce", pass: hp }, { name: "adherence", pass: adh, soft: true }] });
+  const agg = aggregateSamples([mk(true, true), mk(true, false), mk(false, false)]);
+  assert.equal(agg.hardPassRate, 2 / 3);
+  assert.equal(agg.checkRates.announce, 2 / 3);
+  assert.equal(agg.checkRates.adherence, 1 / 3);
+});
+
+test("scoreCase uses an injected adherence verdict (soft, non-gating)", () => {
+  const c = { id: "x", prompt: "p", mode: "router", workflow: "tdd", announce: "Test-Driven Development", checks: ["announce", "adherence"] };
+  const traj = { finalText: "Using Test-Driven Development — done", toolCalls: [] };
+  const r = scoreCase(c, traj, { pass: false, reason: "no test" });
+  const adh = r.checks.find(k => k.name === "adherence");
+  assert.equal(adh.pass, false);
+  assert.equal(adh.soft, true);
+  assert.match(adh.detail, /no test/);
+  assert.equal(r.hardPass, true);
+});
+
 test("summarize computes rates and per-workflow", () => {
   const results = [
     { id: "1", workflow: "debugging", mode: "tool", hardPass: true,
