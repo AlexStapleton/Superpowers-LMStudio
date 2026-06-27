@@ -145,8 +145,9 @@ async function runConversation({ baseUrl, model, messages, tools, executeTool, m
   return { finalText, toolCalls };
 }
 
-// Single completion, no tools — used by the adherence judge.
-async function chatOnce({ baseUrl, model, messages, temperature = 0 }) {
+// Single completion, no tools — used by the adherence judge. Longer default timeout: a 12B reading a
+// long trajectory + procedure can be slow, and a timeout here must not be mistaken for non-adherence.
+async function chatOnce({ baseUrl, model, messages, temperature = 0, timeoutMs = 300000 }) {
   const data = await fetchJson(
     `${baseUrl}/chat/completions`,
     {
@@ -154,7 +155,7 @@ async function chatOnce({ baseUrl, model, messages, temperature = 0 }) {
       headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ model, messages, temperature, stream: false }),
     },
-    120000,
+    timeoutMs,
   );
   return data?.choices?.[0]?.message?.content || "";
 }

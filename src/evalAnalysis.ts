@@ -26,6 +26,8 @@ export interface CheckResult {
   name: string;
   pass: boolean;
   soft?: boolean;
+  /** True when the check could not be evaluated (e.g. judge timeout) — exclude from rates. */
+  errored?: boolean;
   detail?: string;
 }
 export interface CaseResult {
@@ -120,7 +122,7 @@ export function checkFirstStep(workflow: string | null, finalText: string): Chec
 export function scoreCase(
   c: EvalCase,
   traj: Trajectory,
-  adherence?: { pass: boolean; reason?: string },
+  adherence?: { pass: boolean; reason?: string; error?: boolean },
   opts: { routerMatched?: string | null } = {},
 ): CaseResult {
   const checks: CheckResult[] = c.checks.map(name => {
@@ -132,7 +134,7 @@ export function scoreCase(
       case "firstStep": return checkFirstStep(c.workflow, traj.finalText);
       case "adherence":
         return adherence
-          ? { name: "adherence", pass: adherence.pass, soft: true, detail: adherence.reason }
+          ? { name: "adherence", pass: adherence.pass, soft: true, errored: adherence.error, detail: adherence.reason }
           : { name: "adherence", pass: true, soft: true, detail: "no judge" };
       default: return { name, pass: false, detail: "unknown check" };
     }

@@ -17,7 +17,9 @@ async function singleJudge({ baseUrl, model, messages }) {
       lastErr = e;
     }
   }
-  return { pass: false, reason: `judge error: ${lastErr ? lastErr.message : "unknown"}` };
+  // error: true so the runner can EXCLUDE this from the adherence rate (a judge/infra failure is not
+  // a "did not follow" verdict).
+  return { pass: false, error: true, reason: `judge error: ${lastErr ? lastErr.message : "unknown"}` };
 }
 
 async function judgeAdherence({ baseUrl, model, procedure, prompt, trajectory }) {

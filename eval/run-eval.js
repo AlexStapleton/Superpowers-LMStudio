@@ -46,7 +46,7 @@ async function main() {
   const skillByName = new Map(skills.map(s => [s.name, s]));
 
   // R3: fail loudly on bad case config so a typo can't silently skip coverage.
-  const KNOWN_CHECKS = new Set(["announce", "toolInvoked", "noWorkflow", "firstStep", "adherence"]);
+  const KNOWN_CHECKS = new Set(["announce", "toolInvoked", "workflowLoaded", "noWorkflow", "firstStep", "adherence"]);
   let configIssues = 0;
   for (const c of CASES) {
     if (c.workflow && !skillByName.has(c.workflow)) { console.log(`  [config] case ${c.id}: unknown workflow '${c.workflow}'`); configIssues++; }
@@ -81,14 +81,16 @@ async function main() {
 
   const s = summarize(flatResults);
   const adh = flatResults.flatMap(r => r.checks.filter(k => k.name === "adherence"));
-  const adherenceRate = adh.length ? adh.filter(k => k.pass).length / adh.length : 0;
+  const adhValid = adh.filter(k => !k.errored);
+  const adherenceRate = adhValid.length ? adhValid.filter(k => k.pass).length / adhValid.length : 0;
+  const judgeErrors = adh.length - adhValid.length;
   const pct = x => `${Math.round(x * 100)}%`;
   console.log(`\n=== Summary (averaged over ${SAMPLES} samples/case) ===`);
   console.log(`Hard-pass (avg):       ${s.total ? pct(s.hardPass / s.total) : "n/a"}`);
   console.log(`Workflow-loaded rate:  ${pct(s.workflowLoadedRate)}  (router OR tool — the realistic plugin)`);
   console.log(`  ↳ self-invoked tool: ${pct(s.toolInvocationRate)}  (model called use_workflow itself)`);
   console.log(`Announce rate:         ${pct(s.announceRate)}`);
-  console.log(`Adherence (judge):     ${pct(adherenceRate)}  (router cases)`);
+  console.log(`Adherence (judge):     ${pct(adherenceRate)}  (router cases${judgeErrors ? `; ${judgeErrors} judge-error(s) excluded` : ""})`);
   console.log("By workflow:", JSON.stringify(s.byWorkflow));
   if (errorCount) console.log(`Excluded (infra errors, not behavioral failures): ${errorCount} sample(s)`);
 
