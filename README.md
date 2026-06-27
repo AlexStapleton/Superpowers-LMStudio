@@ -131,9 +131,12 @@ In the LM Studio **Plugins** tab:
 
 ## Credits & License
 
-Based on **[Beledarian's LM Studio Toolbox](https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox)**
-(MIT) — the underlying tool suite and sub-agent system. The workflow skill system
-(`skills/`, `src/skills.ts`, the `use_workflow` tool, and the dispatcher/router in the prompt
-preprocessor) was added in this fork.
+This project is licensed under the **GNU General Public License v3.0** — see [`LICENSE`](LICENSE).
+GPL is copyleft: derivatives that are distributed must also be GPL with source available, so the
+plugin and anything built on it stay free for everyone downstream.
 
-See [`LICENSE`](LICENSE).
+It is a derivative of **[Beledarian's LM Studio Toolbox](https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox)**
+(© 2025 Laurin Feulner, MIT) — the underlying tool suite and sub-agent system. MIT permits
+relicensing the combined work under GPL; the required upstream MIT notice is preserved in
+[`NOTICE`](NOTICE). The workflow skill system (`skills/`, `src/skills.ts`, the `use_workflow`
+tool, and the dispatcher/router in the prompt preprocessor) was added in this fork.

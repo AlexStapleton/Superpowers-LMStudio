@@ -12,7 +12,7 @@
     "ci": "npm run typecheck && npm run build && npm run test"
   },
   "author": "",
-  "license": "ISC",
+  "license": "GPL-3.0-or-later",
   "dependencies": {
     "@lmstudio/sdk": "1.4.0",
     "better-sqlite3": "^12.4.6",
