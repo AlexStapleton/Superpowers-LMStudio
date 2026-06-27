@@ -44,11 +44,24 @@ const USE_WORKFLOW_TOOL = {
   },
 };
 
-// Inert stubs so the model can 'act' and we can observe ordering without touching disk.
+// Stub tools the model can 'act' with. Read tools serve from an in-memory sandbox (B8) so
+// explain/debug cases have real files to read instead of hallucinating.
 const STUB_TOOLS = [
   { type: "function", function: { name: "save_file", description: "Create or overwrite a file.", parameters: { type: "object", properties: { file_name: { type: "string" }, content: { type: "string" } }, required: ["file_name"] } } },
   { type: "function", function: { name: "run_test_command", description: "Run the test suite.", parameters: { type: "object", properties: { command: { type: "string" } }, required: [] } } },
+  { type: "function", function: { name: "list_directory", description: "List files in the project.", parameters: { type: "object", properties: { path: { type: "string" } }, required: [] } } },
+  { type: "function", function: { name: "read_file", description: "Read a file's contents.", parameters: { type: "object", properties: { file_name: { type: "string" } }, required: ["file_name"] } } },
+  { type: "function", function: { name: "search_directory", description: "Search files for a pattern.", parameters: { type: "object", properties: { pattern: { type: "string" } }, required: ["pattern"] } } },
 ];
+
+// A small but realistic project so the model can actually explore instead of inventing one.
+const DEFAULT_SANDBOX = {
+  "package.json": '{\n  "name": "widget-store",\n  "scripts": { "start": "node src/index.js", "test": "node --test" },\n  "dependencies": { "express": "^4.18.0" }\n}\n',
+  "README.md": "# Widget Store\n\nA small Express API for managing widgets (list, add, remove).\n",
+  "src/index.js": "const express = require('express');\nconst { widgetRouter } = require('./routes/widgets');\nconst app = express();\napp.use(express.json());\napp.use('/widgets', widgetRouter);\napp.listen(3000, () => console.log('up on 3000'));\n",
+  "src/routes/widgets.js": "const { Router } = require('express');\nconst { getWidgets, addWidget } = require('../db');\nconst widgetRouter = Router();\nwidgetRouter.get('/', (req, res) => res.json(getWidgets()));\nwidgetRouter.post('/', (req, res) => { addWidget(req.body); res.status(201).end(); });\nmodule.exports = { widgetRouter };\n",
+  "src/db.js": "// in-memory widget store\nlet widgets = [];\nfunction getWidgets() { return widgets; }\nfunction addWidget(w) { widgets.push(w); }\nmodule.exports = { getWidgets, addWidget };\n",
+};
 
 // Stateful per conversation: tracks the active workflow + whether a test has been written/run, so the
 // D1 TDD guardrail can be exercised. opts: { guardrailMode: "off"|"warn"|"block", ambientWorkflow }.
@@ -56,6 +69,7 @@ function makeStubExecutor(skills, opts = {}) {
   const mode = opts.guardrailMode || "off";
   let activeWorkflow = opts.ambientWorkflow || null;
   let testSeen = false;
+  const sandbox = { ...(opts.sandbox || DEFAULT_SANDBOX) }; // per-executor copy so writes don't leak
   return async (name, args) => {
     if (name === "use_workflow") {
       activeWorkflow = args.workflow;
@@ -68,11 +82,29 @@ function makeStubExecutor(skills, opts = {}) {
       testSeen = true;
       return JSON.stringify({ ok: true, output: "ran 1 test, 1 failed (expected — no implementation yet)" });
     }
+    if (name === "list_directory") {
+      return JSON.stringify({ files: Object.keys(sandbox) });
+    }
+    if (name === "read_file") {
+      const fn = args.file_name || "";
+      return JSON.stringify(fn in sandbox ? { content: sandbox[fn] } : { error: `not found: ${fn}` });
+    }
+    if (name === "search_directory") {
+      const pat = String(args.pattern || "");
+      const hits = [];
+      for (const [f, content] of Object.entries(sandbox)) {
+        content.split("\n").forEach((line, i) => {
+          if (pat && line.includes(pat)) hits.push({ file: f, line: i + 1, text: line.trim() });
+        });
+      }
+      return JSON.stringify({ matches: hits.slice(0, 25) });
+    }
     if (name === "save_file") {
       const fileName = args.file_name || (Array.isArray(args.files) && args.files[0] && args.files[0].file_name) || "";
       if (isTestFile(fileName)) testSeen = true;
       const g = evaluateTddGuardrail({ active: activeWorkflow, testSeen, fileName, mode });
       if (g.block) return JSON.stringify({ blocked: true, error: g.warning });
+      if (fileName) sandbox[fileName] = args.content || "";
       return JSON.stringify(g.warning ? { ok: true, warning: g.warning } : { ok: true });
     }
     return JSON.stringify({ ok: true });

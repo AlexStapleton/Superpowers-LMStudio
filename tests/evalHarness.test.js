@@ -42,6 +42,22 @@ test("stub executor: run_test_command clears the guardrail; off mode never block
   assert.equal(JSON.parse(await off("save_file", { file_name: "app.py", content: "x" })).ok, true);
 });
 
+// --- B8: sandboxed read tools (real files, not hallucination) ---
+
+test("stub executor: list/read/search serve the sandbox; save_file is then readable", async () => {
+  const exec = makeStubExecutor(SKILLS, {});
+  const ls = JSON.parse(await exec("list_directory", {}));
+  assert.ok(ls.files.includes("package.json") && ls.files.includes("src/index.js"));
+  const rf = JSON.parse(await exec("read_file", { file_name: "src/db.js" }));
+  assert.match(rf.content, /addWidget/);
+  const sd = JSON.parse(await exec("search_directory", { pattern: "express" }));
+  assert.ok(sd.matches.length > 0);
+  // a written file becomes readable
+  await exec("save_file", { file_name: "src/new.js", content: "const x = 1;" });
+  const back = JSON.parse(await exec("read_file", { file_name: "src/new.js" }));
+  assert.match(back.content, /const x = 1/);
+});
+
 // --- runConversation tool loop ---
 
 test("runConversation captures tool calls (in order) then final text", async () => {
