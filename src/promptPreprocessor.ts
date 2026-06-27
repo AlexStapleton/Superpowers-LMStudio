@@ -15,7 +15,7 @@ import { getPersistedState, savePersistedState } from "./stateManager";
 import { getDict } from "./locales/i18n";
 import { loadSkillsCached, getSkillsDirCandidates, renderDispatcherTable, matchTriggers, type Skill } from "./skills";
 import { appendRoutingEvent } from "./routingLog";
-import { semanticMatch, buildEmbeddingText, type SkillEmbedding } from "./semanticRouter";
+import { semanticMatch, buildEmbeddingText, QUERY_PREFIX, DOC_PREFIX, type SkillEmbedding } from "./semanticRouter";
 
 // Cache of skill embeddings (recomputed only when the skill set changes). C1 semantic router.
 let cachedSkillEmbeddings: { key: string; embeddings: SkillEmbedding[] } | null = null;
@@ -31,10 +31,10 @@ async function semanticRoute(
     const model = await ctl.client.embedding.model("nomic-ai/nomic-embed-text-v1.5-GGUF", { signal: ctl.abortSignal });
     const key = skills.map(s => s.name).join(",");
     if (!cachedSkillEmbeddings || cachedSkillEmbeddings.key !== key) {
-      const embs = await model.embed(skills.map(s => buildEmbeddingText(s)));
+      const embs = await model.embed(skills.map(s => DOC_PREFIX + buildEmbeddingText(s)));
       cachedSkillEmbeddings = { key, embeddings: skills.map((s, i) => ({ name: s.name, vector: embs[i].embedding })) };
     }
-    const [q] = await model.embed([userPrompt]);
+    const [q] = await model.embed([QUERY_PREFIX + userPrompt]);
     const hit = semanticMatch(q.embedding, cachedSkillEmbeddings.embeddings, threshold);
     return hit ? hit.name : null;
   } catch (e) {

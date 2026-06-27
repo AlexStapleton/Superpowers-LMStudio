@@ -40,3 +40,8 @@ export function buildEmbeddingText(skill: { description: string; examples?: stri
   const ex = (skill.examples || []).join("; ");
   return ex ? `${skill.description}. Examples: ${ex}` : skill.description;
 }
+
+// nomic-embed models require task-instruction prefixes; without them query↔document cosine scores
+// come out too low to clear the threshold. Apply these at the embedding call sites.
+export const QUERY_PREFIX = "search_query: ";
+export const DOC_PREFIX = "search_document: ";

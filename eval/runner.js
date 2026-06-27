@@ -2,7 +2,7 @@
 // runCase runs N samples, judges adherence, scores, aggregates, and excludes infra-errored samples.
 const { renderDispatcherTable, matchTriggers } = require("../dist/skills.js");
 const { scoreCase, aggregateSamples } = require("../dist/evalAnalysis.js");
-const { semanticMatch, buildEmbeddingText } = require("../dist/semanticRouter.js");
+const { semanticMatch, buildEmbeddingText, QUERY_PREFIX, DOC_PREFIX } = require("../dist/semanticRouter.js");
 const { runConversation, makeStubExecutor, embed, USE_WORKFLOW_TOOL, STUB_TOOLS } = require("./client.js");
 const { judgeAdherence } = require("./judge.js");
 
@@ -36,11 +36,11 @@ async function routerLoaded(c, ctx) {
   // Semantic fallback via the embeddings endpoint (skips gracefully if no embedding model).
   const key = ctx.skills.map(s => s.name).join(",");
   if (!cachedEvalSkillEmbeddings || cachedEvalSkillEmbeddings.key !== key) {
-    const vecs = await embed(ctx.baseUrl, ctx.embedModel, ctx.skills.map(s => buildEmbeddingText(s)));
+    const vecs = await embed(ctx.baseUrl, ctx.embedModel, ctx.skills.map(s => DOC_PREFIX + buildEmbeddingText(s)));
     if (!vecs) return null;
     cachedEvalSkillEmbeddings = { key, embeddings: ctx.skills.map((s, i) => ({ name: s.name, vector: vecs[i] })) };
   }
-  const q = await embed(ctx.baseUrl, ctx.embedModel, [c.prompt]);
+  const q = await embed(ctx.baseUrl, ctx.embedModel, [QUERY_PREFIX + c.prompt]);
   if (!q) return null;
   const hit = semanticMatch(q[0], cachedEvalSkillEmbeddings.embeddings, ctx.semanticThreshold ?? 0.5);
   return hit ? hit.name : null;
