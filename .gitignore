@@ -26,5 +26,6 @@ upgrade_path.md
 # Routing observability log (A1)
 routing-log.jsonl
 
-# Behavioral eval output (B1)
+# Behavioral eval output (B1) + regression baseline (R5) — machine/model specific
 eval/report.json
+eval/baseline.json

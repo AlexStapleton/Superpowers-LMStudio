@@ -79,7 +79,20 @@ test("parseJudgeVerdict parses clean JSON, fenced JSON, and rejects garbage", ()
   assert.equal(parseJudgeVerdict("no json here").pass, false);
 });
 
-const { majorityVerdict } = require("../dist/evalAnalysis.js");
+const { majorityVerdict, checkRegressions } = require("../dist/evalAnalysis.js");
+
+test("checkRegressions flags metrics that dropped beyond the margin", () => {
+  const baseline = { announceRate: 0.6, toolInvocationRate: 1.0, adherenceRate: 0.9, total: 10, hardPass: 8 };
+  const current = { announceRate: 0.6, toolInvocationRate: 0.7, adherenceRate: 0.9, total: 10, hardPass: 8 };
+  const regs = checkRegressions(baseline, current, 0.1);
+  assert.equal(regs.length, 1);
+  assert.equal(regs[0].metric, "toolInvocationRate"); // dropped 1.0 -> 0.7 (> 0.1 margin)
+
+  // within margin -> no regression
+  assert.equal(checkRegressions(baseline, { ...current, toolInvocationRate: 0.95 }, 0.1).length, 0);
+  // improvement -> never a regression
+  assert.equal(checkRegressions(baseline, { ...baseline, adherenceRate: 1.0 }, 0.1).length, 0);
+});
 
 test("majorityVerdict takes the strict majority and fails closed on ties", () => {
   assert.equal(majorityVerdict([{ pass: true }, { pass: true }, { pass: false }]).pass, true);

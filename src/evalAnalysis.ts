@@ -178,6 +178,49 @@ export function majorityVerdict(verdicts: { pass: boolean; reason?: string }[]):
   return { pass, reason: rep.reason ?? "" };
 }
 
+// --- Regression gate (R5) ---
+
+export interface RunSummaryLike {
+  announceRate?: number;
+  toolInvocationRate?: number;
+  adherenceRate?: number;
+  total?: number;
+  hardPass?: number;
+}
+export interface Regression {
+  metric: string;
+  baseline: number;
+  current: number;
+  drop: number;
+}
+
+export function checkRegressions(
+  baseline: RunSummaryLike,
+  current: RunSummaryLike,
+  margin = 0.1,
+): Regression[] {
+  const out: Regression[] = [];
+  const rateMetrics: (keyof RunSummaryLike)[] = ["announceRate", "toolInvocationRate", "adherenceRate"];
+  for (const m of rateMetrics) {
+    const b = (baseline[m] as number) ?? 0;
+    const c = (current[m] as number) ?? 0;
+    if (c < b - margin) out.push({ metric: m, baseline: b, current: c, drop: b - c });
+  }
+  const bHard = baseline.total ? (baseline.hardPass ?? 0) / baseline.total : 0;
+  const cHard = current.total ? (current.hardPass ?? 0) / current.total : 0;
+  if (cHard < bHard - margin) out.push({ metric: "hardPassRate", baseline: bHard, current: cHard, drop: bHard - cHard });
+  return out;
+}
+
+export function formatRegressions(regressions: Regression[]): string {
+  if (regressions.length === 0) return "No regressions vs baseline.";
+  const pct = (n: number) => `${Math.round(n * 100)}%`;
+  return (
+    "REGRESSIONS vs baseline:\n" +
+    regressions.map(r => `  ${r.metric}: ${pct(r.baseline)} -> ${pct(r.current)} (down ${Math.round(r.drop * 100)} pts)`).join("\n")
+  );
+}
+
 // --- N-sample aggregation (B6) ---
 
 export function aggregateSamples(results: CaseResult[]): { hardPassRate: number; checkRates: Record<string, number> } {

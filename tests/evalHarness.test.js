@@ -3,6 +3,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { runConversation, makeStubExecutor } = require("../eval/client.js");
 const { judgeAdherence } = require("../eval/judge.js");
+const { runCase } = require("../eval/runner.js");
 
 const SKILLS = [{ name: "tdd", announce: "Test-Driven Development", body: "TDD body", triggers: [], examples: [], description: "d" }];
 
@@ -83,5 +84,33 @@ test("judgeAdherence parses a fenced JSON verdict from a mock model", async () =
     const v = await judgeAdherence({ baseUrl: "http://x/v1", model: "m", procedure: "p", prompt: "u", trajectory: { finalText: "x", toolCalls: [] } });
     assert.equal(v.pass, true);
     assert.match(v.reason, /test/);
+  } finally { global.fetch = orig; }
+});
+
+// --- R4: full per-case orchestration ---
+
+test("runCase: samples → judge → aggregate, with trajectory recorded", async () => {
+  const orig = global.fetch;
+  global.fetch = mockFetch([
+    assistantToolCall("use_workflow", '{"workflow":"tdd"}'),
+    assistantToolCall("save_file", '{"file_name":"byte.py","content":"x"}'),
+    assistantToolCall("save_file", '{"file_name":"test_byte.py","content":"t"}'),
+    assistantText("Using Test-Driven Development — wrote the test first"),
+    assistantText('{"follows": true, "reason": "test before impl"}'),
+  ]);
+  try {
+    const c = { id: "tdd-x", mode: "router", workflow: "tdd", announce: "Test-Driven Development", checks: ["announce", "adherence"], prompt: "make a util" };
+    const ctx = {
+      baseUrl: "http://x/v1", model: "m", judgeModel: "m",
+      skills: SKILLS, skillByName: new Map(SKILLS.map(s => [s.name, s])),
+      samples: 1, guardrailMode: "block", tools: [],
+    };
+    const { caseReport, results, errors } = await runCase(c, ctx);
+    assert.equal(errors, 0);
+    assert.equal(results.length, 1);
+    assert.deepEqual(caseReport.samples[0].toolCalls.map(t => t.name), ["use_workflow", "save_file", "save_file"]);
+    assert.equal(caseReport.samples[0].verdict.pass, true);
+    assert.equal(caseReport.agg.checkRates.adherence, 1);
+    assert.equal(caseReport.agg.checkRates.announce, 1);
   } finally { global.fetch = orig; }
 });
