@@ -1,6 +1,6 @@
 // Per-case orchestration, extracted from run-eval.js so it is unit-testable (R4).
 // runCase runs N samples, judges adherence, scores, aggregates, and excludes infra-errored samples.
-const { renderDispatcherTable } = require("../dist/skills.js");
+const { renderDispatcherTable, matchTriggers } = require("../dist/skills.js");
 const { scoreCase, aggregateSamples } = require("../dist/evalAnalysis.js");
 const { runConversation, makeStubExecutor, USE_WORKFLOW_TOOL, STUB_TOOLS } = require("./client.js");
 const { judgeAdherence } = require("./judge.js");
@@ -11,20 +11,32 @@ const DISPATCH_PREAMBLE =
   "and follow what it returns, opening your reply with \"Using <workflow> —\". If nothing clearly " +
   "matches (simple commands, questions, small edits), ignore this and just respond normally.";
 
-function buildSystem(skills, c) {
+// injectWorkflowName: the workflow the (simulated) router pre-injects, or null. Mirrors the real
+// plugin, where the code router injects the procedure when the prompt matches a trigger.
+function buildSystem(skills, c, injectWorkflowName) {
   let sys = DISPATCH_PREAMBLE + "\n\n" + renderDispatcherTable(skills);
-  if (c.mode === "router" && c.workflow) {
-    const skill = skills.find(s => s.name === c.workflow);
+  if (injectWorkflowName) {
+    const skill = skills.find(s => s.name === injectWorkflowName);
     if (skill) sys += "\n\n[Workflow auto-loaded — follow this procedure now]\n" + skill.body;
   }
   return sys;
 }
 
+// What the system loads up front: router-mode forces the case's workflow; otherwise (realistic) the
+// code router injects whatever the regex triggers match on the prompt (often nothing — the real gap).
+function routerLoaded(skills, c, routerOn) {
+  if (c.mode === "router" && c.workflow) return c.workflow;
+  if (routerOn) return matchTriggers(skills, c.prompt);
+  return null;
+}
+
 // ctx: { baseUrl, model, judgeModel, skills, skillByName, samples, guardrailMode, tools }
 // Returns { caseReport, results: CaseResult[] (non-errored only), errors }.
 async function runCase(c, ctx) {
+  const routerOn = ctx.routerOn !== false;
+  const loaded = routerLoaded(ctx.skills, c, routerOn); // workflow the router pre-injects (or null)
   const messages = [
-    { role: "system", content: buildSystem(ctx.skills, c) },
+    { role: "system", content: buildSystem(ctx.skills, c, loaded) },
     { role: "user", content: c.prompt },
   ];
   const usesJudge = c.checks.includes("adherence") && c.workflow && ctx.skillByName.has(c.workflow);
@@ -52,7 +64,7 @@ async function runCase(c, ctx) {
         procedure: ctx.skillByName.get(c.workflow).body, prompt: c.prompt, trajectory: traj,
       });
     }
-    const r = scoreCase(c, traj, verdict);
+    const r = scoreCase(c, traj, verdict, { routerMatched: loaded });
     results.push(r);
     samples.push({ result: r, finalText: traj.finalText, toolCalls: traj.toolCalls, verdict });
   }

@@ -19,6 +19,7 @@ const CASE_FILTER = process.env.EVAL_CASE || null;
 const SAMPLES = Math.max(1, parseInt(process.env.EVAL_SAMPLES || "3", 10));
 const GUARDRAIL_MODE = process.env.EVAL_GUARDRAIL || "block"; // off | warn | block
 const MAX_TURNS = Math.max(1, parseInt(process.env.EVAL_MAX_TURNS || "8", 10)); // realistic exploration needs room
+const ROUTER_ON = (process.env.EVAL_ROUTER || "on") !== "off"; // model the real plugin's code router
 
 async function main() {
   const model = process.env.EVAL_MODEL || (await probeEndpoint(BASE_URL));
@@ -55,9 +56,10 @@ async function main() {
 
   console.log(`Samples/case: ${SAMPLES}   Judge: ${JUDGE_MODEL} x${process.env.EVAL_JUDGE_VOTES || 1}   TDD guardrail: ${GUARDRAIL_MODE}\n`);
 
+  console.log(`Router (code-side): ${ROUTER_ON ? "on (realistic)" : "off (isolates model self-routing)"}\n`);
   const ctx = {
     baseUrl: BASE_URL, model, judgeModel: JUDGE_MODEL, skills, skillByName,
-    samples: SAMPLES, guardrailMode: GUARDRAIL_MODE, maxTurns: MAX_TURNS,
+    samples: SAMPLES, guardrailMode: GUARDRAIL_MODE, maxTurns: MAX_TURNS, routerOn: ROUTER_ON,
     tools: [USE_WORKFLOW_TOOL, ...STUB_TOOLS],
   };
 
@@ -82,10 +84,11 @@ async function main() {
   const adherenceRate = adh.length ? adh.filter(k => k.pass).length / adh.length : 0;
   const pct = x => `${Math.round(x * 100)}%`;
   console.log(`\n=== Summary (averaged over ${SAMPLES} samples/case) ===`);
-  console.log(`Hard-pass (avg):      ${s.total ? pct(s.hardPass / s.total) : "n/a"}`);
-  console.log(`Announce rate:        ${pct(s.announceRate)}`);
-  console.log(`Tool-invocation rate: ${pct(s.toolInvocationRate)}  (tool-mode)`);
-  console.log(`Adherence (judge):    ${pct(adherenceRate)}  (router cases)`);
+  console.log(`Hard-pass (avg):       ${s.total ? pct(s.hardPass / s.total) : "n/a"}`);
+  console.log(`Workflow-loaded rate:  ${pct(s.workflowLoadedRate)}  (router OR tool — the realistic plugin)`);
+  console.log(`  ↳ self-invoked tool: ${pct(s.toolInvocationRate)}  (model called use_workflow itself)`);
+  console.log(`Announce rate:         ${pct(s.announceRate)}`);
+  console.log(`Adherence (judge):     ${pct(adherenceRate)}  (router cases)`);
   console.log("By workflow:", JSON.stringify(s.byWorkflow));
   if (errorCount) console.log(`Excluded (infra errors, not behavioral failures): ${errorCount} sample(s)`);
 

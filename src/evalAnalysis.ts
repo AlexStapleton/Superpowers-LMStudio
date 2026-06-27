@@ -40,6 +40,7 @@ export interface EvalSummary {
   hardPass: number;
   announceRate: number;
   toolInvocationRate: number;
+  workflowLoadedRate: number;
   firstStepRate: number;
   byWorkflow: Record<string, { total: number; hardPass: number }>;
 }
@@ -57,7 +58,22 @@ export function checkAnnounce(finalText: string, announce: string | undefined): 
 
 export function checkToolInvoked(toolCalls: ToolCall[], workflow: string | null): CheckResult {
   const pass = toolCalls.some(c => c.name === "use_workflow" && c.args?.workflow === workflow);
-  return { name: "toolInvoked", pass, detail: pass ? undefined : `no use_workflow(${workflow}) call` };
+  // Soft/informational: in the realistic (router-on) plugin, the router can load the workflow even
+  // when the model never self-invokes the tool — so self-invocation is a signal, not a requirement.
+  return { name: "toolInvoked", pass, soft: true, detail: pass ? undefined : `no use_workflow(${workflow}) call` };
+}
+
+// Realistic mode: did the workflow load by EITHER path — the code router matching the prompt, or the
+// model calling use_workflow? This is the metric that reflects the actual hybrid plugin.
+export function checkWorkflowLoaded(
+  toolCalls: ToolCall[],
+  workflow: string | null,
+  routerMatched: string | null | undefined,
+): CheckResult {
+  const viaTool = toolCalls.some(c => c.name === "use_workflow" && c.args?.workflow === workflow);
+  const viaRouter = !!workflow && routerMatched === workflow;
+  const pass = viaTool || viaRouter;
+  return { name: "workflowLoaded", pass, detail: viaRouter ? "via router" : viaTool ? "via tool" : "NOT loaded" };
 }
 
 export function checkNoWorkflow(toolCalls: ToolCall[], finalText: string): CheckResult {
@@ -105,11 +121,13 @@ export function scoreCase(
   c: EvalCase,
   traj: Trajectory,
   adherence?: { pass: boolean; reason?: string },
+  opts: { routerMatched?: string | null } = {},
 ): CaseResult {
   const checks: CheckResult[] = c.checks.map(name => {
     switch (name) {
       case "announce": return checkAnnounce(traj.finalText, c.announce);
       case "toolInvoked": return checkToolInvoked(traj.toolCalls, c.workflow);
+      case "workflowLoaded": return checkWorkflowLoaded(traj.toolCalls, c.workflow, opts.routerMatched);
       case "noWorkflow": return checkNoWorkflow(traj.toolCalls, traj.finalText);
       case "firstStep": return checkFirstStep(c.workflow, traj.finalText);
       case "adherence":
@@ -259,6 +277,7 @@ export function summarize(results: CaseResult[]): EvalSummary {
 
   let announceTotal = 0, announcePass = 0;
   let toolTotal = 0, toolPass = 0;
+  let loadedTotal = 0, loadedPass = 0;
   let firstTotal = 0, firstPass = 0;
   const byWorkflow: Record<string, { total: number; hardPass: number }> = {};
 
@@ -271,6 +290,7 @@ export function summarize(results: CaseResult[]): EvalSummary {
     for (const c of r.checks) {
       if (c.name === "announce") { announceTotal++; if (c.pass) announcePass++; }
       if (c.name === "toolInvoked" && r.mode === "tool") { toolTotal++; if (c.pass) toolPass++; }
+      if (c.name === "workflowLoaded") { loadedTotal++; if (c.pass) loadedPass++; }
       if (c.name === "firstStep") { firstTotal++; if (c.pass) firstPass++; }
     }
   }
@@ -280,6 +300,7 @@ export function summarize(results: CaseResult[]): EvalSummary {
     hardPass: results.filter(r => r.hardPass).length,
     announceRate: rate(announcePass, announceTotal),
     toolInvocationRate: rate(toolPass, toolTotal),
+    workflowLoadedRate: rate(loadedPass, loadedTotal),
     firstStepRate: rate(firstPass, firstTotal),
     byWorkflow,
   };

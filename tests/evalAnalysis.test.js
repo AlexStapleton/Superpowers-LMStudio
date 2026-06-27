@@ -43,6 +43,27 @@ test("checkFirstStep is soft and defaults to pass for workflows with no heuristi
   assert.equal(r.pass, true);
 });
 
+test("workflowLoaded passes via router match OR a use_workflow tool call (realistic mode)", () => {
+  const c = { id: "x", prompt: "p", mode: "tool", workflow: "debugging", checks: ["workflowLoaded"] };
+  // via tool
+  const viaTool = scoreCase(c, { finalText: "", toolCalls: [{ name: "use_workflow", args: { workflow: "debugging" } }] }, undefined, {});
+  assert.equal(viaTool.checks[0].pass, true);
+  // via router (no tool call, but router matched the prompt to this workflow)
+  const viaRouter = scoreCase(c, { finalText: "", toolCalls: [] }, undefined, { routerMatched: "debugging" });
+  assert.equal(viaRouter.checks[0].pass, true);
+  // neither -> the real coverage gap
+  const neither = scoreCase(c, { finalText: "", toolCalls: [] }, undefined, { routerMatched: null });
+  assert.equal(neither.checks[0].pass, false);
+});
+
+test("summarize reports workflowLoadedRate", () => {
+  const results = [
+    { id: "1", workflow: "debugging", mode: "tool", hardPass: true, checks: [{ name: "workflowLoaded", pass: true }] },
+    { id: "2", workflow: "debugging", mode: "tool", hardPass: false, checks: [{ name: "workflowLoaded", pass: false }] },
+  ];
+  assert.equal(summarize(results).workflowLoadedRate, 0.5);
+});
+
 test("scoreCase: soft firstStep does not gate hardPass", () => {
   const c = { id: "x", prompt: "p", mode: "router", workflow: "tdd", announce: "Test-Driven Development", checks: ["announce", "firstStep"] };
   const traj = { finalText: "Using Test-Driven Development — here is the implementation ```js x ```", toolCalls: [] };
