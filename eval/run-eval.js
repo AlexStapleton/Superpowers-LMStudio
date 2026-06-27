@@ -72,8 +72,9 @@ async function main() {
 
   console.log(`Samples/case: ${SAMPLES}   Judge: ${JUDGE_MODEL} x${process.env.EVAL_JUDGE_VOTES || 1}   TDD guardrail: ${GUARDRAIL_MODE}\n`);
 
-  const flatResults = [];   // every sample's CaseResult — feeds the overall summary
+  const flatResults = [];   // every NON-errored sample's CaseResult — feeds the overall summary
   const caseReports = [];   // per-case: samples (trajectory + verdict) + aggregate
+  let errorCount = 0;       // infra errors, excluded from metrics
 
   for (const c of cases) {
     const messages = [
@@ -92,7 +93,12 @@ async function main() {
       try {
         traj = await runConversation({ baseUrl: BASE_URL, model, messages, tools, executeTool });
       } catch (e) {
-        traj = { finalText: "", toolCalls: [] };
+        // Infra error (network/model) is NOT a behavioral failure — exclude it from the metrics
+        // so a flaky endpoint can't corrupt the numbers.
+        errorCount++;
+        console.log(`    [${c.id} #${i + 1}] sample EXCLUDED (infra error): ${e.message}`);
+        samples.push({ errored: true, error: e.message });
+        continue;
       }
       let verdict;
       if (usesJudge) {
@@ -105,10 +111,13 @@ async function main() {
       flatResults.push(r);
       samples.push({ result: r, finalText: traj.finalText, toolCalls: traj.toolCalls, verdict });
     }
-    const agg = aggregateSamples(samples.map(s => s.result));
+    const valid = samples.filter(s => s.result).map(s => s.result);
+    const n = valid.length;
+    const agg = aggregateSamples(valid);
     caseReports.push({ id: c.id, mode: c.mode, workflow: c.workflow, agg, samples });
-    const detail = c.checks.map(n => `${n}:${Math.round((agg.checkRates[n] ?? 0) * SAMPLES)}/${SAMPLES}`).join("  ");
-    console.log(`  ${c.id.padEnd(18)} (${c.mode}/${c.workflow ?? "benign"})  hardPass ${Math.round(agg.hardPassRate * SAMPLES)}/${SAMPLES}   ${detail}`);
+    const detail = c.checks.map(name => `${name}:${Math.round((agg.checkRates[name] ?? 0) * n)}/${n}`).join("  ");
+    const errNote = n < SAMPLES ? `  (${SAMPLES - n} errored)` : "";
+    console.log(`  ${c.id.padEnd(18)} (${c.mode}/${c.workflow ?? "benign"})  hardPass ${Math.round(agg.hardPassRate * n)}/${n}${errNote}   ${detail}`);
   }
 
   const s = summarize(flatResults);
@@ -121,10 +130,11 @@ async function main() {
   console.log(`Tool-invocation rate: ${pct(s.toolInvocationRate)}  (tool-mode)`);
   console.log(`Adherence (judge):    ${pct(adherenceRate)}  (router cases)`);
   console.log("By workflow:", JSON.stringify(s.byWorkflow));
+  if (errorCount) console.log(`Excluded (infra errors, not behavioral failures): ${errorCount} sample(s)`);
 
   const reportPath = path.join(__dirname, "report.json");
   fs.writeFileSync(reportPath, JSON.stringify(
-    { model, judgeModel: JUDGE_MODEL, baseUrl: BASE_URL, samples: SAMPLES, summary: { ...s, adherenceRate }, cases: caseReports },
+    { model, judgeModel: JUDGE_MODEL, baseUrl: BASE_URL, samples: SAMPLES, summary: { ...s, adherenceRate, errorCount }, cases: caseReports },
     null, 2));
   console.log(`\nFull report: ${reportPath}`);
 }
