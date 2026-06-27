@@ -15,6 +15,7 @@ import { validateToolCall } from "./toolCallValidator";
 import { backgroundCommands, generateId, BackgroundCommand } from "./backgroundCommands";
 import { loadSkillsCached, getSkillsDirCandidates, buildWorkflowToolResult } from "./skills";
 import { appendRoutingEvent } from "./routingLog";
+import { isTestFile, evaluateTddGuardrail, type TddGuardrailMode } from "./guardrails";
 
 import type { Browser, Page } from "puppeteer";
 
@@ -131,6 +132,11 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
   const fullState = await getPersistedState(defaultWorkspacePath);
   let currentWorkingDirectory = fullState.currentWorkingDirectory;
 
+  // D1: TDD test-first guardrail state (per session). Set when use_workflow loads a workflow;
+  // tddTestSeen flips once a test file is written or a test command runs.
+  let activeWorkflow: string | null = null;
+  let tddTestSeen = false;
+
   const allowAllCode = pluginConfig.get("allowAllCode");
   let allowJavascript = pluginConfig.get("allowJavascriptExecution");
   let allowPython = pluginConfig.get("allowPythonExecution");
@@ -190,6 +196,8 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         if (!skill) {
           return { error: `Unknown workflow '${workflow}'. Valid: ${skillNames.join(", ")}` };
         }
+        activeWorkflow = workflow;
+        if (workflow === "tdd") tddTestSeen = false;
         await appendRoutingEvent(pluginConfig.get("enableRoutingLog"), { kind: "tool", workflow });
         return buildWorkflowToolResult(skill);
       },
@@ -769,6 +777,22 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         return { error: "Must provide either file_name and content, or a files array." };
       }
 
+      // D1: TDD test-first guardrail. Writing a test (or running tests) clears it.
+      if (filesToSave.some(f => isTestFile(f.file_name))) tddTestSeen = true;
+      const guardrailMode = (pluginConfig.get("tddGuardrail") as TddGuardrailMode) || "warn";
+      let tddWarning: string | null = null;
+      for (const f of filesToSave) {
+        const g = evaluateTddGuardrail({ active: activeWorkflow, testSeen: tddTestSeen, fileName: f.file_name, mode: guardrailMode });
+        if (g.block) {
+          return {
+            error: g.warning,
+            tdd_guardrail: "blocked",
+            hint: "Write a failing test first (save the test file, or run_test_command), then save the source file.",
+          };
+        }
+        if (g.warning) tddWarning = g.warning;
+      }
+
       const savedPaths: string[] = [];
       const errors: string[] = [];
 
@@ -802,6 +826,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         success: true,
         paths: savedPaths,
         errors: errors.length > 0 ? errors : undefined,
+        tdd_guardrail_warning: tddWarning ?? undefined,
       };
     },
   });
@@ -2367,6 +2392,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       command: z.string().describe("The test command to run (e.g., 'npm test', 'pytest')."),
     },
     implementation: async ({ command }) => {
+      tddTestSeen = true; // running tests satisfies the TDD test-first guardrail
       return new Promise((resolve) => {
         const parts = command.split(" ");
         const cmd = parts[0];

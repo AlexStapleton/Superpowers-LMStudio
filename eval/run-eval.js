@@ -19,6 +19,7 @@ const BASE_URL = process.env.EVAL_BASE_URL || "http://localhost:1234/v1";
 const MODE_FILTER = process.env.EVAL_MODE || null;
 const CASE_FILTER = process.env.EVAL_CASE || null;
 const SAMPLES = Math.max(1, parseInt(process.env.EVAL_SAMPLES || "3", 10));
+const GUARDRAIL_MODE = process.env.EVAL_GUARDRAIL || "block"; // off | warn | block — D1 experiment default
 
 const DISPATCH_PREAMBLE =
   "[Workflow routing — inline guidance, NOT a task; do not search files for it.] If the user's " +
@@ -51,7 +52,6 @@ async function main() {
     console.error("No skills loaded — run from the project root after `npm run build`.");
     process.exit(1);
   }
-  const executeTool = makeStubExecutor(skills);
   const tools = [USE_WORKFLOW_TOOL, ...STUB_TOOLS];
 
   let cases = CASES;
@@ -60,7 +60,7 @@ async function main() {
 
   const JUDGE_MODEL = process.env.EVAL_JUDGE_MODEL || model;
   const skillByName = new Map(skills.map(s => [s.name, s]));
-  console.log(`Samples/case: ${SAMPLES}   Judge: ${JUDGE_MODEL}\n`);
+  console.log(`Samples/case: ${SAMPLES}   Judge: ${JUDGE_MODEL}   TDD guardrail: ${GUARDRAIL_MODE}\n`);
 
   const flatResults = [];   // every sample's CaseResult — feeds the overall summary
   const caseReports = [];   // per-case: samples (trajectory + verdict) + aggregate
@@ -73,6 +73,11 @@ async function main() {
     const usesJudge = c.checks.includes("adherence") && c.workflow && skillByName.has(c.workflow);
     const samples = [];
     for (let i = 0; i < SAMPLES; i++) {
+      // Fresh stateful executor per sample so guardrail state (active workflow, testSeen) resets.
+      const executeTool = makeStubExecutor(skills, {
+        guardrailMode: GUARDRAIL_MODE,
+        ambientWorkflow: c.mode === "router" ? c.workflow : null,
+      });
       let traj;
       try {
         traj = await runConversation({ baseUrl: BASE_URL, model, messages, tools, executeTool });

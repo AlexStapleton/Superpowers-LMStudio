@@ -203,4 +203,8 @@ export const pluginConfigSchematics = createConfigSchematics()
     displayName: "Log workflow routing decisions",
     subtitle: "Append each routing decision (matched workflow, router vs use_workflow tool) to ~/.beledarians-llm-toolbox/routing-log.jsonl. View a summary with `npm run routing-stats`.",
   }, false)
+  .field("tddGuardrail", "string", {
+    displayName: "TDD test-first guardrail",
+    subtitle: "When the TDD workflow is active, controls saving source code before a test exists: 'off', 'warn' (save but warn), or 'block' (refuse and tell the model to write a failing test first).",
+  }, "warn")
   .build();
