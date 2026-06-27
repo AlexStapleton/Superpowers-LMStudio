@@ -1,208 +1,139 @@
-# Beledarian's LM Studio Tools
+# Superpowers for LM Studio
 
-[English](README.md) | [Deutsch](https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox/blob/main/README.de.md) | [简体中文](https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox/blob/main/README.zh-CN.md) | [繁體中文](https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox/blob/main/README.zh-TW.md)
+An [LM Studio](https://lmstudio.ai/) plugin that gives a local model a full agentic toolset —
+file system, shell, web/RAG, git & GitHub, sub-agents — and layers on a **Superpowers-style
+workflow skill system** that gets even small local models (tested on **Gemma 4 12B**) to
+reliably follow real engineering workflows instead of improvising.
 
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox)
+> Based on [Beledarian's LM Studio Toolbox](https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox)
+> (MIT), extended with the workflow skill system described below.
 
-This project is a plugin for [LM Studio](https://lmstudio.ai/) that provides a rich set of tools to a large language model. It acts as a bridge between the LLM and your local environment, enabling autonomous coding, research, and file management.
+---
 
-> [!IMPORTANT]
-> **LM Studio does NOT support automatic updates.** If you encounter issues, please try manually updating first by removing the current version and re-downloading from the [plugin website](https://lmstudio.ai/beledarian/beledarians-lm-studio-tools). LM Studio may show an "already installed" tooltip, even if your version is outdated.
+## Why this exists
 
-## Key Features
+Local models are far weaker instruction-followers than frontier models. Cramming a giant
+"always follow these workflows" system prompt into context doesn't work — the model reads it
+once and then drifts back to direct execution.
 
-### File System Mastery
+This plugin borrows the mechanism that makes Anthropic's **Superpowers** skill system reliable
+and adapts it **downward** for ~12B models:
 
-- **Full Control:** Create, read, update, delete, move, and copy files.
-- **Safe & Secure:** All operations are sandboxed to your workspace directory to prevent path traversal attacks.
-- **Smart Updates:** Use `replace_text_in_file` to make surgical edits instead of rewriting large files.
-- **Batch Processing:** `save_file` supports creating multiple files in one go.
-- **Cleanup:** Use `delete_files_by_pattern` to wipe temporary files instantly.
+- **Just-in-time delivery** — workflow procedures aren't all dumped up front. The relevant one
+  is loaded at the moment it's needed, at the top of attention.
+- **A forcing function** — a `use_workflow` tool the model calls to load a workflow. It returns
+  the full procedure and instructs the model to announce `Using <workflow> —`, creating an
+  observable commitment.
+- **A code-side backstop** — because a 12B won't always remember to call the tool, a keyword
+  router in the prompt preprocessor injects the matching workflow automatically on
+  high-confidence triggers. The model doesn't have to decide; the code guarantees the right
+  procedure is present.
+- **One registry, many files** — each workflow is a single `skills/*.md` file. Adding one
+  needs **no code change**.
 
-> **Encountering issues?** Feel free to [submit them on GitHub](https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox/issues).
->
-> **Find this project helpful?** Consider [giving it a ⭐ on GitHub](https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox) or [contributing!](https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox/tree/main?tab=contributing-ov-file) Thank you for using the toolbox.
+## How the skill system works
 
+1. **Dispatcher (every turn).** A compact table of available workflows plus the rule: *if the
+   request matches one, call `use_workflow` first.* Small enough to re-inject every turn.
+2. **`use_workflow` tool.** The model calls it with a workflow name; it returns the full
+   procedure and the announcement instruction. This is the primary, model-driven path.
+3. **Keyword router (backstop).** [`src/skills.ts`](src/skills.ts) matches the user's message
+   against each skill's `triggers`; on a confident match the preprocessor injects that
+   workflow's body directly — so the procedure is present even if the model never calls the
+   tool. Benign messages (e.g. `cd`, `pwd`, "thanks") match nothing and are left alone. Toggle
+   with the **Auto-load matching workflow** setting (`enableWorkflowRouter`).
 
-### Recent Updates (v1.3.2)
+All three are driven by one in-memory registry, so the dispatcher table, the tool's workflow
+list, and the router triggers can never drift apart.
 
-- **🛠️ Tool Reordering & Optimization:** Reordered the tools list to prioritize casual utilities, improving agent tool selection. Upgraded the web search tool with smart Chrome detection and fallback.
-- **🤖 Sub-Agent Reliability Rework:** Overhauled the sub-agent loop to prevent infinite loops, improved tool call parsing, unified path/content normalization, and added explicit task completion/abortion capabilities (`TASK_FAILED`).
-- **✨ New Sub-Agent Tools:** Empowered sub-agents with `multi_replace_text`, `search_directory`, and background command execution. Main agents now support robust batch file saving.
+### Included workflows (`skills/`)
 
-<details>
-<summary><strong>Older Updates (v1.3.1 & earlier)</strong></summary>
+| Skill | Fires when |
+|-------|------------|
+| `brainstorming` | starting a new feature/component, before writing code |
+| `tdd` | implementing any feature or bugfix (test-first) |
+| `debugging` | a bug, test failure, or unexpected behavior |
+| `verification` | before claiming work is done / fixed / passing |
+| `research` | looking something up or answering external/current facts |
+| `explaining-code` | asked to explain, understand, or walk through a codebase |
 
-### v1.3.1
+### Add your own workflow
 
-- **🌍 Full Internationalization (i18n):** Added complete UI and runtime support for **English**, **German**, **Simplified Chinese**, and **Traditional Chinese**.
-- **🌐 Dual-Layer Translation:** Supports both "Config UI" (static) and "Agent Messages" (dynamic runtime) languages.
-- **🔄 UI Language Override:** Added a field to manually force the Config UI into a specific locale for testing, bypassing OS-level detection on the next plugin restart.
+Drop a Markdown file in [`skills/`](skills):
 
-### v1.3.0
+```markdown
+---
+name: my-workflow
+description: Use when <trigger condition> — feeds the dispatcher table and tool list
+announce: My Workflow
+triggers:
+  - "regex source one"
+  - "regex source two"
+---
+Open your reply with: "Using My Workflow —"
 
-- **🐙 Native GitHub CLI Tools:** Added `gh_auth`, `gh_create_issue`, `gh_list_issues`, `gh_view_comments`, `gh_create_pr`, `gh_list_prs`, `gh_view_pr_diff`, and `gh_push` for secure, structured GitHub interactions without generic shell commands
-- **🌿 Enhanced Git Workflow:** Added `git_add` and `git_checkout` tools to complete the native git toolchain (status, diff, log, commit, add, checkout)
-- **⚙️ New Sidebar Toggle:** Added "Allow GitHub CLI Tools" setting to enable/disable `gh_*` tools independently
-- **🛡️ Dependency Guards:** All CLI tools now verify installation before execution and provide clear prompts if missing
+...the step-by-step procedure the model should follow...
+```
 
-### v1.2.0
+Restart the plugin (`lms dev`). The dispatcher table, the `use_workflow` enum, and the router
+all pick it up automatically — no TypeScript changes required.
 
-- **🛡️ Sub-Agent Tool Validation:** Added early parameter validation with clear error messages to prevent silent failures when sub-agents use wrong parameter names or absolute paths outside workspace
-- **🧪 Regression Tests:** Added 14 new tests for tool call validation logic (total: 51 tests)
-- **💬 Better Error Feedback:** Sub-agents now receive `TOOL_VALIDATION_ERROR` messages with helpful hints about correct parameter names vs common mistakes
+---
 
-### v1.1.1 (2026-04-08)
-**Browser Reliability and Navigation Context**
+## Core toolset
 
-- **Fixed:** Browser action clicks now include a DOM-level fallback when Puppeteer reports "Node is either not clickable or not an Element"
-- **Improved:** Browser click actions now retry native click after ~300ms before falling back
-- **Added:** `browser_session_open` returns full page text by default (`include_page_text` defaults to true)
-- **Refined:** Multi-step routing guidance now prioritizes `browser_session_open -> browser_session_control -> browser_session_close`
-
-### v1.1.0 (2026-04-08)
-**Sub-Agent Compatibility Improvements**
-
-- **Fixed:** Gemma 4 and other models using `{"tool": "...", "parameters": {...}}` format now work correctly with `consult_secondary_agent`
-- **Added:** Advanced browser navigation (`browser_session_open`, `browser_session_control`, `browser_session_close`) including in-page fuzzy find and URL-change notices
-- **Added:** Structured sub-agent handoff message support (`handoff_message`) for relay/summary workflows
-- **Added:** Enable Sub-Agent Debug Logging toggle in plugin settings
-- **Added:** Support for direct `{file_name, content}` JSON format from some models
-
-### v1.0.x Previous Updates
-- **Smart Context Injection:** `subagent_docs.md` is automatically loaded into the context
-- **Enhanced Reporting:** Fixed file path reporting in `consult_secondary_agent`
-- **Project Tracking:** Sub-agents enforce creation of `beledarian_info.md`
-- **Strict Naming:** Improved instructions for correct file extensions
-
-</details>
-
-
-### Autonomous Agents
-
-- **Secondary Agent:** Delegate complex tasks (coding, summarization) to a second local model/server with support for the main model already used and loaded by LM Studio!
-- **Auto-Save:** When the sub-agent generates code, the system **automatically detects and saves it** to your disk. No more copy-pasting!
-- **Auto-Debug:** (Optional) Triggers a "Reviewer" agent to analyze generated code and fix bugs automatically before returning the result.
-- **Structured Handoff:** Sub-agents can return a dedicated `handoff_message` for the main agent to relay findings/research.
-- **Project Context:** Agents can read `beledarian_info.md` to understand your project's history.
-
-### Code Execution
-
-- **Sandboxed:** Run JavaScript (Deno) and Python code.
-- **Terminal:** Execute shell commands or open real terminal windows for interactive tasks.
-
-> [!WARNING]
-> Enabling shell or terminal execution allows the model to run arbitrary commands on your system. If enabled, the model may be able to modify files and escape the sandbox environment.
-
-### Web & RAG
-
-- **Research:** Search DuckDuckGo, Wikipedia, or fetch raw web content.
-- **Advanced Browser Navigation:** Persistent `browser_session_open/control/close` flow for multi-step browsing and automation.
-- **Web RAG:** Chat with website content.
-- **Local RAG:** Semantic search over your workspace files (`rag_local_files`).
+- **File system:** read/write, ranged reads, surgical edits (`replace_text_in_file`,
+  `insert_at_line`, `multi_replace_text`), search (`search_in_file`, `search_directory`,
+  `find_files`, `fuzzy_find_local_files`), `get_current_directory`.
+- **Execution (opt-in):** shell, interactive terminal, background commands, Python, JavaScript
+  (Deno-sandboxed), test runner. All gated behind per-tool safety toggles, **off by default**.
+- **Web & RAG:** `web_search`, `fetch_web_content`, `wikipedia_search`, persistent browser
+  sessions, web-page RAG, and semantic search over local files.
+- **Git & GitHub:** native `git_*` tools plus `gh_*` (issues, PRs, diffs, push).
+- **Sub-agents:** delegate coding/research to a secondary local model, with auto-save and
+  optional auto-debug; run independent tasks in parallel.
+- **Utility:** memory, clipboard, system info, datetime, document parsing (PDF/DOCX),
+  SQLite inspection, desktop notifications.
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/) (v18+)
-- [LM Studio](https://lmstudio.ai/) (v0.3.0+)
+- [Node.js](https://nodejs.org/) 18+
+- [LM Studio](https://lmstudio.ai/) 0.3.0+
 
-> **💡 Tip:** Need persistent long-term memory for your agent?
-> Check out my other project: **[Local Memory MCP](https://github.com/Beledarian/mcp-local-memory)** – A privacy-first memory server with knowledge graph support.
+## Development
 
-## Installation
+```bash
+npm install
+lms dev          # run from the project dir; LM Studio hot-reloads on src/ changes
+```
 
-The plugin can be installed using the following link:
+> **Note:** after adding or editing a `skills/*.md` file, restart `lms dev` — the skill
+> registry caches at process start and the watcher only tracks `src/`.
 
-[https://lmstudio.ai/beledarian/beledarians-lm-studio-tools](https://lmstudio.ai/beledarian/beledarians-lm-studio-tools)
+Run the full check suite (typecheck + build + tests):
 
-Alternatively, you can install it manually for development purposes.
-
-### Development
-
-If you want to contribute to the development of this plugin, you can follow these steps:
-
-1. **Clone the repository:**
-
-    ```bash
-    git clone https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox.git
-    cd Beledarians_LM_Studio_Toolbox
-    ```
-
-2. **Install dependencies:**
-
-    ```bash
-    npm install
-    ```
-
-3. **Run in development mode:**
-    From within the project directory, run the following command:
-
-    ```bash
-    lms dev
-    ```
-
-    This will start the plugin in development mode. LM Studio should automatically pick it up. Any changes you make to the source code will cause the plugin to automatically reload.
+```bash
+npm run ci
+```
 
 ## Configuration
 
-Access these settings in the LM Studio "Plugins" tab:
+In the LM Studio **Plugins** tab:
 
-- **Enable Secondary Agent:** Unlock the power of sub-agents.
-- **Sub-Agent Profiles:** Custom prompts for "Coder", "Reviewer", etc.
-- **Auto-Debug Mode:** Automatically review sub-agent code.
-- **Sub-Agent Debug Logging:** Toggle detailed sub-agent parsing logs for troubleshooting.
-- **Sub-Agent Auto-Save:** Toggle automatic file saving (Default: On).
-- **Show Full Code Output:** Toggle whether to display the full code in chat or hide it for brevity (files are still saved).
-- **Default Workspace Path:** Set the startup workspace directory used by the plugin.
-- **Safety:** Enable/Disable "Allow Code Execution" for Python/JS/Shell.
-- **Browser Safety:** Browser automation for sub-agents requires all three toggles: `Allow Browser Control` + `Sub-Agent: Allow Web Search` + `Sub-Agent: Allow Browser Control`.
+- **Execution permissions** — Allow JavaScript / Python / Shell / Terminal / Browser Control
+  (all **off** by default).
+- **Auto-load matching workflow** (`enableWorkflowRouter`) — the code-side router backstop
+  (default **on**).
+- **Plan Mode** — when the model should explore and propose a plan before changing code.
+- **Allow Git Operations / GitHub CLI Tools**.
+- **Secondary / sub-agent** settings — endpoint, model, permissions, profiles.
+- **Default Workspace Path**, memory, language, and more.
 
-## Available Tools
+## Credits & License
 
-### File System
+Based on **[Beledarian's LM Studio Toolbox](https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox)**
+(MIT) — the underlying tool suite and sub-agent system. The workflow skill system
+(`skills/`, `src/skills.ts`, the `use_workflow` tool, and the dispatcher/router in the prompt
+preprocessor) was added in this fork.
 
-- `list_directory`, `change_directory`, `make_directory`
-- `read_file`, `save_file` (supports batch), `delete_path`
-- `replace_text_in_file`: Precision editing.
-- `delete_files_by_pattern`: Regex-based cleanup.
-- `move_file`, `copy_file`, `find_files`, `get_file_metadata`
-- `fuzzy_find_local_files`: Levenshtein-based fuzzy file path/name search.
-
-### Agent
-
-- `consult_secondary_agent`: The powerhouse tool. Delegates tasks, handles file creation, and manages sub-agent loops.
-
-### Web
-
-- `web_search` (DuckDuckGo API + HTML fetch/browser fallback), `wikipedia_search`
-- `fetch_web_content`, `rag_web_content`
-- `browser_session_open`, `browser_session_control`, `browser_session_close` (persistent page automation; preferred for multi-step navigation, with deduped page-text output unless `full_read=true`)
-- `browser_open_page` (stateless one-shot Puppeteer read)
-- Workaround tip: if selector-based click fails, use an `evaluate` action to click by text, then call with `full_read=true`.
-
-```json
-{
-  "actions": [
-    {
-      "type": "evaluate",
-      "script": "const link=[...document.querySelectorAll('a')].find(a=>a.textContent?.includes('LICENSE')); if(link) link.click();"
-    }
-  ],
-  "full_read": true
-}
-```
-
-### Execution
-
-- `run_javascript`, `run_python`
-- `execute_command` (Background), `run_in_terminal` (Interactive)
-
-### Utils
-
-- `rag_local_files`: Search your code.
-- `save_memory`: Long-term memory.
-- `get_system_info`, `read_clipboard`, `write_clipboard`
-
-## Developer Guide
-
-See [CODE_OVERVIEW.md](https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox/blob/main/CODE_OVERVIEW.md) for architectural details.
+See [`LICENSE`](LICENSE).
