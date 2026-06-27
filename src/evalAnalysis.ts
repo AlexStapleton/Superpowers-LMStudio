@@ -221,6 +221,21 @@ export function formatRegressions(regressions: Regression[]): string {
   );
 }
 
+// --- Judge calibration (R6) ---
+
+export function calibrationReport(results: { expected: boolean; got: boolean }[]): {
+  total: number; correct: number; agreement: number; falsePositives: number; falseNegatives: number;
+} {
+  let correct = 0, falsePositives = 0, falseNegatives = 0;
+  for (const r of results) {
+    if (r.got === r.expected) correct++;
+    else if (r.got && !r.expected) falsePositives++;
+    else falseNegatives++;
+  }
+  const total = results.length;
+  return { total, correct, agreement: total ? correct / total : 0, falsePositives, falseNegatives };
+}
+
 // --- N-sample aggregation (B6) ---
 
 export function aggregateSamples(results: CaseResult[]): { hardPassRate: number; checkRates: Record<string, number> } {

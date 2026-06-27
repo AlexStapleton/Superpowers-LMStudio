@@ -11,7 +11,8 @@
     "test": "node --test tests/browserActions.test.js tests/fuzzySearch.test.js tests/handoffMessage.test.js tests/subAgentToolCallParser.test.js tests/promptPreprocessor.test.js tests/nodeNotifier.test.js tests/fileEditingTools.test.js tests/subAgentValidation.test.js tests/i18n.test.js tests/skills.test.js tests/skillRouting.test.js tests/routingLog.test.js tests/evalAnalysis.test.js tests/guardrails.test.js tests/evalHarness.test.js",
     "ci": "npm run typecheck && npm run build && npm run test",
     "routing-stats": "npm run build && node scripts/routing-stats.js",
-    "eval": "npm run build && node eval/run-eval.js"
+    "eval": "npm run build && node eval/run-eval.js",
+    "judge-calibration": "npm run build && node eval/calibrate-judge.js"
   },
   "author": "",
   "license": "GPL-3.0-or-later",
