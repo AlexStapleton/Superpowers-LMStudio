@@ -199,4 +199,8 @@ export const pluginConfigSchematics = createConfigSchematics()
     displayName: "Auto-load matching workflow",
     subtitle: "When a message clearly matches a workflow (e.g. a bug report), inject that workflow's procedure automatically as a backstop to the use_workflow tool.",
   }, true)
+  .field("enableRoutingLog", "boolean", {
+    displayName: "Log workflow routing decisions",
+    subtitle: "Append each routing decision (matched workflow, router vs use_workflow tool) to ~/.beledarians-llm-toolbox/routing-log.jsonl. View a summary with `npm run routing-stats`.",
+  }, false)
   .build();

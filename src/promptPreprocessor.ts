@@ -145,7 +145,7 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
         }
       }
     }
-    await appendRoutingEvent(debugMode, {
+    await appendRoutingEvent(pluginConfig.get("enableRoutingLog"), {
       kind: "router",
       matched,
       action: routerAction,

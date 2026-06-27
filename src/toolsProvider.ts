@@ -190,7 +190,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         if (!skill) {
           return { error: `Unknown workflow '${workflow}'. Valid: ${skillNames.join(", ")}` };
         }
-        await appendRoutingEvent(pluginConfig.get("enableDebugMode"), { kind: "tool", workflow });
+        await appendRoutingEvent(pluginConfig.get("enableRoutingLog"), { kind: "tool", workflow });
         return buildWorkflowToolResult(skill);
       },
     });
