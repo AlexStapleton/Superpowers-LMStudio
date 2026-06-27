@@ -70,7 +70,8 @@ async function main() {
       traj = { finalText: "", toolCalls: [] };
     }
     const r = scoreCase(c, traj);
-    results.push(r);
+    // Attach the trajectory so the report is diagnosable, not just a scoreboard.
+    results.push({ ...r, prompt: c.prompt, toolCalls: traj.toolCalls, finalText: traj.finalText });
     const mark = r.hardPass ? "PASS" : "FAIL";
     const detail = r.checks.map(k => `${k.name}${k.soft ? "*" : ""}:${k.pass ? "y" : "n"}`).join(" ");
     console.log(`  [${mark}] ${c.id.padEnd(18)} (${c.mode}/${c.workflow ?? "benign"})  ${detail}`);
