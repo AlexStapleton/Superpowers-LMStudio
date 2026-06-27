@@ -1,6 +1,12 @@
 // Minimal OpenAI-compatible client for the behavioral eval (B1). No deps — Node 18+ fetch.
 const { buildWorkflowToolResult } = require("../dist/skills.js");
 
+// LM Studio servers can require a Bearer token. Set EVAL_API_KEY (or OPENAI_API_KEY) to send it.
+const API_KEY = process.env.EVAL_API_KEY || process.env.OPENAI_API_KEY || "";
+function authHeaders(extra = {}) {
+  return API_KEY ? { ...extra, Authorization: `Bearer ${API_KEY}` } : extra;
+}
+
 async function fetchJson(url, opts, timeoutMs) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -16,7 +22,7 @@ async function fetchJson(url, opts, timeoutMs) {
 // Returns the first model id the endpoint advertises, or null if unreachable.
 async function probeEndpoint(baseUrl) {
   try {
-    const data = await fetchJson(`${baseUrl}/models`, { method: "GET" }, 4000);
+    const data = await fetchJson(`${baseUrl}/models`, { method: "GET", headers: authHeaders() }, 4000);
     return data?.data?.[0]?.id ?? null;
   } catch {
     return null;
@@ -65,7 +71,7 @@ async function runConversation({ baseUrl, model, messages, tools, executeTool, m
       `${baseUrl}/chat/completions`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ model, messages: convo, tools, temperature: 0.3, stream: false }),
       },
       120000,
