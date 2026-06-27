@@ -16,3 +16,12 @@ beledarian_info.md
 memory.md
 .beledarian/memory.md
 .beledarian/beledarian_info.md
+
+# Local-only planning docs & artifacts (kept off the published repo)
+docs/
+install-state.json
+typecheck_output.txt
+upgrade_path.md
+
+# Routing observability log (A1)
+routing-log.jsonl
