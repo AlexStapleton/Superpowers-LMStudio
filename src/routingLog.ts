@@ -17,8 +17,10 @@ export type RoutingEvent =
   | {
       ts: string;
       kind: "router";
-      /** Skill matched by triggers this turn, or null. */
+      /** Skill matched this turn (keyword or semantic), or null. */
       matched: string | null;
+      /** How it matched — keyword regex, semantic embedding, or none. */
+      via?: "keyword" | "semantic" | "none";
       action: "injected" | "deduped" | "disabled" | "no-match";
       /** Truncated user message for context (local-only log). */
       promptPreview: string;

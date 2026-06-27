@@ -207,4 +207,12 @@ export const pluginConfigSchematics = createConfigSchematics()
     displayName: "TDD test-first guardrail",
     subtitle: "When the TDD workflow is active, controls saving source code before a test exists: 'off', 'warn' (save but warn), or 'block' (refuse and tell the model to write a failing test first).",
   }, "warn")
+  .field("enableSemanticRouter", "boolean", {
+    displayName: "Semantic workflow routing",
+    subtitle: "When the keyword triggers miss, match the message to a workflow by meaning (embeddings) — catches naturally-phrased requests the keywords can't. Requires the embedding model.",
+  }, true)
+  .field("semanticRouterThreshold", "string", {
+    displayName: "Semantic routing threshold (0–1)",
+    subtitle: "Cosine-similarity cutoff for semantic routing. Higher = stricter / fewer false matches. Default 0.5.",
+  }, "0.5")
   .build();

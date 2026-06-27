@@ -13,8 +13,35 @@ import { pluginConfigSchematics } from "./config";
 import { TOOLS_DOCUMENTATION, TOOLS_DOCUMENTATION_LITE } from "./toolsDocumentation";
 import { getPersistedState, savePersistedState } from "./stateManager";
 import { getDict } from "./locales/i18n";
-import { loadSkillsCached, getSkillsDirCandidates, renderDispatcherTable, decideRouterInjection, matchTriggers } from "./skills";
+import { loadSkillsCached, getSkillsDirCandidates, renderDispatcherTable, matchTriggers, type Skill } from "./skills";
 import { appendRoutingEvent } from "./routingLog";
+import { semanticMatch, buildEmbeddingText, type SkillEmbedding } from "./semanticRouter";
+
+// Cache of skill embeddings (recomputed only when the skill set changes). C1 semantic router.
+let cachedSkillEmbeddings: { key: string; embeddings: SkillEmbedding[] } | null = null;
+
+// Embedding fallback: when the keyword triggers miss, match the message to a workflow by meaning.
+async function semanticRoute(
+  ctl: PromptPreprocessorController,
+  skills: Skill[],
+  userPrompt: string,
+  threshold: number,
+): Promise<string | null> {
+  try {
+    const model = await ctl.client.embedding.model("nomic-ai/nomic-embed-text-v1.5-GGUF", { signal: ctl.abortSignal });
+    const key = skills.map(s => s.name).join(",");
+    if (!cachedSkillEmbeddings || cachedSkillEmbeddings.key !== key) {
+      const embs = await model.embed(skills.map(s => buildEmbeddingText(s)));
+      cachedSkillEmbeddings = { key, embeddings: skills.map((s, i) => ({ name: s.name, vector: embs[i].embedding })) };
+    }
+    const [q] = await model.embed([userPrompt]);
+    const hit = semanticMatch(q.embedding, cachedSkillEmbeddings.embeddings, threshold);
+    return hit ? hit.name : null;
+  } catch (e) {
+    ctl.debug("Semantic router unavailable; falling back to keyword-only.", e);
+    return null;
+  }
+}
 
 type DocumentContextInjectionStrategy = "none" | "inject-full-content" | "retrieval";
 
@@ -121,33 +148,41 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
       + renderDispatcherTable(skills) + "\n\n";
     currentContent = dispatcher + currentContent;
 
-    // --- Code-side router backstop (+ observability A1/A2) ---
-    const matched = matchTriggers(skills, userPrompt);
+    // --- Code-side router backstop: keyword + semantic fallback (C1); observability A1/A2 ---
+    const routerEnabled = pluginConfig.get("enableWorkflowRouter");
+    const keywordMatch = matchTriggers(skills, userPrompt);
+    let routedName: string | null = keywordMatch;
+    let routedVia: "keyword" | "semantic" | "none" = keywordMatch ? "keyword" : "none";
+    if (!routedName && routerEnabled && pluginConfig.get("enableSemanticRouter")) {
+      const threshold = parseFloat(pluginConfig.get("semanticRouterThreshold")) || 0.5;
+      const semName = await semanticRoute(ctl, skills, userPrompt, threshold);
+      if (semName) { routedName = semName; routedVia = "semantic"; }
+    }
+
     let routerAction: "injected" | "deduped" | "disabled" | "no-match";
-    if (!pluginConfig.get("enableWorkflowRouter")) {
+    if (!routerEnabled) {
       routerAction = "disabled";
+    } else if (routedName && routedName !== state.lastInjectedWorkflow) {
+      const skill = skills.find(s => s.name === routedName);
+      if (skill) {
+        currentContent = `[Workflow auto-loaded — follow this procedure now]\n${skill.body}\n\n` + currentContent;
+      }
+      state.lastInjectedWorkflow = routedName;
+      await savePersistedState(state);
+      routerAction = "injected";
+    } else if (routedName) {
+      routerAction = "deduped"; // matched but suppressed (== last-injected)
     } else {
-      const decision = decideRouterInjection(skills, userPrompt, state.lastInjectedWorkflow);
-      if (decision) {
-        currentContent =
-          `[Workflow auto-loaded — follow this procedure now]\n${decision.body}\n\n` + currentContent;
-        state.lastInjectedWorkflow = decision.name;
+      routerAction = "no-match";
+      if (state.lastInjectedWorkflow !== null) {
+        state.lastInjectedWorkflow = null;
         await savePersistedState(state);
-        routerAction = "injected";
-      } else if (matched) {
-        // Matched but suppressed because it equals the last-injected workflow.
-        routerAction = "deduped";
-      } else {
-        routerAction = "no-match";
-        if (state.lastInjectedWorkflow !== null) {
-          state.lastInjectedWorkflow = null;
-          await savePersistedState(state);
-        }
       }
     }
     await appendRoutingEvent(pluginConfig.get("enableRoutingLog"), {
       kind: "router",
-      matched,
+      matched: routedName,
+      via: routedVia,
       action: routerAction,
       promptPreview: userPrompt.slice(0, 200),
     });
