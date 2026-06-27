@@ -8,6 +8,10 @@ triggers:
   - "did it (pass|work)"
   - "is (it|this) (fixed|working|passing)"
   - "verify (the|this|that)"
+examples:
+  - "is the fix done?"
+  - "are we done yet"
+  - "did it pass"
 ---
 
 Open your reply with: "Using Verification Before Completion —"

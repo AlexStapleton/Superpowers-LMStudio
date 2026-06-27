@@ -5,6 +5,9 @@ announce: Code Conventions Check
 triggers:
   - "match (the )?(existing )?(code )?(conventions|style|patterns)"
   - "follow (the )?(existing )?(code )?(conventions|style|patterns)"
+examples:
+  - "follow the existing code conventions"
+  - "match the conventions in this module"
 ---
 
 Open your reply with: "Using Code Conventions Check —"

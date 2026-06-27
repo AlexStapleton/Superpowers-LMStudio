@@ -8,6 +8,10 @@ triggers:
   - "implement (the|this) plan"
   - "follow (the|this) plan"
   - "start (on |with )?(the|this) plan"
+examples:
+  - "execute the plan"
+  - "follow the plan in docs/plans"
+  - "start on the plan"
 ---
 
 Open your reply with: "Using Executing a Written Plan —"

@@ -9,6 +9,10 @@ triggers:
   - "build (a|the|me)"
   - "create (a|the) (function|class|component|module)"
   - "fix(ing)? (the )?(feature|function)"
+examples:
+  - "implement a CSV parser"
+  - "build a login form"
+  - "add a feature flag"
 ---
 
 Open your reply with: "Using Test-Driven Development —"

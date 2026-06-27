@@ -9,6 +9,10 @@ triggers:
   - "design (a|the|me)"
   - "build me"
   - "add (support for|the ability)"
+examples:
+  - "let's build a dark mode toggle"
+  - "i want to build a new dashboard"
+  - "design a new feature for exporting reports"
 ---
 
 Open your reply with: "Using Brainstorming —"

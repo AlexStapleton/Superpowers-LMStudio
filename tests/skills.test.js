@@ -10,6 +10,9 @@ const SAMPLE = [
   "triggers:",
   '  - "\\\\bbug\\\\b"',
   '  - "not working"',
+  "examples:",
+  '  - "there is a bug in login"',
+  '  - "the page is not working"',
   "---",
   "",
   "Body line one.",
@@ -22,6 +25,7 @@ test("parseSkillMarkdown extracts frontmatter and body", () => {
   assert.equal(skill.description, "Use when debugging");
   assert.equal(skill.announce, "Systematic Debugging");
   assert.deepEqual(skill.triggers, ["\\bbug\\b", "not working"]);
+  assert.deepEqual(skill.examples, ["there is a bug in login", "the page is not working"]);
   assert.match(skill.body, /Body line one\./);
   assert.ok(!skill.body.includes("---"));
 });

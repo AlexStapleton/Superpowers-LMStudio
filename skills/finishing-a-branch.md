@@ -7,6 +7,10 @@ triggers:
   - "finish (the|this) (branch|feature|work)"
   - "open (a|the) pr"
   - "merge (this|the) (branch|feature|pr)"
+examples:
+  - "ready to merge"
+  - "open a PR for this"
+  - "finish this feature"
 ---
 
 Open your reply with: "Using Finishing a Branch —"

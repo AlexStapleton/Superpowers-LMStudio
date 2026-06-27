@@ -6,6 +6,8 @@ export interface Skill {
   description: string;
   announce: string;
   triggers: string[];
+  /** Example user prompts that should route to this skill — asserted by the routing eval. */
+  examples: string[];
   body: string;
 }
 export interface SkillMeta { name: string; description: string; announce: string; }
@@ -17,22 +19,27 @@ export function parseSkillMarkdown(markdown: string): Skill {
 
   const lines = frontmatter.split("\n");
   const scalars: Record<string, string> = {};
-  const triggers: string[] = [];
-  let inTriggers = false;
+  const lists: Record<string, string[]> = {};
+  let currentList: string | null = null;
 
   for (const raw of lines) {
     const line = raw.replace(/\s+$/, "");
     if (!line.trim()) continue;
     const listItem = line.match(/^\s*-\s+(.*)$/);
-    if (inTriggers && listItem) {
-      triggers.push(unquote(listItem[1].trim()));
+    if (currentList && listItem) {
+      lists[currentList].push(unquote(listItem[1].trim()));
       continue;
     }
     const kv = line.match(/^([A-Za-z_]+):\s*(.*)$/);
     if (kv) {
       const [, key, value] = kv;
-      if (key === "triggers") { inTriggers = true; continue; }
-      inTriggers = false;
+      if (value.trim() === "") {
+        // A key with no inline value starts a list (e.g. `triggers:` / `examples:`).
+        currentList = key;
+        lists[key] = lists[key] ?? [];
+        continue;
+      }
+      currentList = null;
       scalars[key] = unquote(value.trim());
     }
   }
@@ -45,7 +52,8 @@ export function parseSkillMarkdown(markdown: string): Skill {
     name: scalars.name,
     description: scalars.description,
     announce: scalars.announce,
-    triggers,
+    triggers: lists["triggers"] ?? [],
+    examples: lists["examples"] ?? [],
     body: body.trim(),
   };
 }

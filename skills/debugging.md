@@ -10,6 +10,10 @@ triggers:
   - "\\bcrash(es|ing|ed)?\\b"
   - "throw(s|ing)? (an )?error"
   - "doesn'?t work"
+examples:
+  - "there is a bug in the login flow"
+  - "the tests are failing"
+  - "this function throws an error"
 ---
 
 Open your reply with: "Using Systematic Debugging —"

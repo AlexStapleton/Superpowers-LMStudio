@@ -8,6 +8,10 @@ triggers:
   - "review (feedback|comments)"
   - "address (the|this|these) (review|feedback|comments)"
   - "the reviewer (said|noted|wants)"
+examples:
+  - "here is the code review from my colleague"
+  - "address this feedback"
+  - "the reviewer said to rename it"
 ---
 
 Open your reply with: "Using Receiving Code Review —"

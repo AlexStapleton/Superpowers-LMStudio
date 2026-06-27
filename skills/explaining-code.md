@@ -9,6 +9,10 @@ triggers:
   - "walk me through"
   - "understand .{0,20}\\b(code|codebase|project|file|repo|app)\\b"
   - "what is this (code|project|repo|codebase|app)"
+examples:
+  - "explain to me this code"
+  - "what does this function do"
+  - "walk me through the auth flow"
 ---
 
 Open your reply with: "Using Code Explanation —"

@@ -6,6 +6,9 @@ triggers:
   - "review (my|this|the|our) (code|change|changes|pr|implementation|diff|work)"
   - "can you (do |run |perform )?review"
   - "(do|run|perform|request) (a )?(code )?review"
+examples:
+  - "can you review my code"
+  - "please do a code review of this PR"
 ---
 
 Open your reply with: "Using Requesting Code Review —"

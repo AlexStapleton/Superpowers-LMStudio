@@ -6,6 +6,9 @@ triggers:
   - "in parallel"
   - "(multiple|several) (independent|unrelated) (bugs|tasks|issues|problems)"
   - "at the same time .{0,20}(tasks|bugs|fixes)"
+examples:
+  - "fix these multiple independent bugs"
+  - "run these tasks in parallel"
 ---
 
 Open your reply with: "Using Parallel Agent Dispatch —"

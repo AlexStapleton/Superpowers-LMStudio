@@ -9,6 +9,10 @@ triggers:
   - "find (out |information )"
   - "what'?s the latest"
   - "latest (news|version|release)"
+examples:
+  - "research the latest react features"
+  - "look up the current node LTS version"
+  - "search the web for vite plugins"
 ---
 
 Open your reply with: "Using Research —"

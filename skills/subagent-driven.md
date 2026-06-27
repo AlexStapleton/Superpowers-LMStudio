@@ -6,6 +6,9 @@ triggers:
   - "subagent.?driven"
   - "(a )?subagent per task"
   - "dispatch (a )?(fresh )?subagent (for|per) (each )?task"
+examples:
+  - "use subagent-driven development for this plan"
+  - "dispatch a fresh subagent for each task"
 ---
 
 Open your reply with: "Using Subagent-Driven Implementation —"

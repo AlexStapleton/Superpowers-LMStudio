@@ -6,6 +6,10 @@ triggers:
   - "write (an?|the) (implementation )?plan"
   - "create (an?|the) (implementation )?plan"
   - "\\bplan (out )?(the )?(implementation|work|approach)"
+examples:
+  - "write an implementation plan for this"
+  - "create a plan for the migration"
+  - "plan out the implementation"
 ---
 
 Open your reply with: "Using Writing Plans —"
