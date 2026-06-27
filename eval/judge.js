@@ -1,12 +1,13 @@
 // Adherence judge (backlog B7). Asks a model to grade whether the agent's trajectory followed the
 // workflow procedure — replacing the brittle text-regex firstStep heuristic. Judge model defaults to
 // the eval model; override with EVAL_JUDGE_MODEL.
-const { buildJudgePrompt, parseJudgeVerdict } = require("../dist/evalAnalysis.js");
+const { buildJudgePrompt, parseJudgeVerdict, majorityVerdict } = require("../dist/evalAnalysis.js");
 const { chatOnce } = require("./client.js");
 
-async function judgeAdherence({ baseUrl, model, procedure, prompt, trajectory }) {
-  const judgePrompt = buildJudgePrompt(procedure, prompt, trajectory);
-  const messages = [{ role: "user", content: judgePrompt }];
+// EVAL_JUDGE_VOTES > 1 hardens the noisiest link (Gemma-judges-Gemma) via majority vote.
+const VOTES = Math.max(1, parseInt(process.env.EVAL_JUDGE_VOTES || "1", 10));
+
+async function singleJudge({ baseUrl, model, messages }) {
   let lastErr;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -17,6 +18,14 @@ async function judgeAdherence({ baseUrl, model, procedure, prompt, trajectory })
     }
   }
   return { pass: false, reason: `judge error: ${lastErr ? lastErr.message : "unknown"}` };
+}
+
+async function judgeAdherence({ baseUrl, model, procedure, prompt, trajectory }) {
+  const messages = [{ role: "user", content: buildJudgePrompt(procedure, prompt, trajectory) }];
+  if (VOTES === 1) return singleJudge({ baseUrl, model, messages });
+  const verdicts = [];
+  for (let v = 0; v < VOTES; v++) verdicts.push(await singleJudge({ baseUrl, model, messages }));
+  return majorityVerdict(verdicts);
 }
 
 module.exports = { judgeAdherence };

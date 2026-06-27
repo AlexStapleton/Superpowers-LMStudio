@@ -60,7 +60,17 @@ async function main() {
 
   const JUDGE_MODEL = process.env.EVAL_JUDGE_MODEL || model;
   const skillByName = new Map(skills.map(s => [s.name, s]));
-  console.log(`Samples/case: ${SAMPLES}   Judge: ${JUDGE_MODEL}   TDD guardrail: ${GUARDRAIL_MODE}\n`);
+
+  // R3: fail loudly on bad case config so a typo can't silently skip coverage.
+  const KNOWN_CHECKS = new Set(["announce", "toolInvoked", "noWorkflow", "firstStep", "adherence"]);
+  let configIssues = 0;
+  for (const c of CASES) {
+    if (c.workflow && !skillByName.has(c.workflow)) { console.log(`  [config] case ${c.id}: unknown workflow '${c.workflow}'`); configIssues++; }
+    for (const k of c.checks) if (!KNOWN_CHECKS.has(k)) { console.log(`  [config] case ${c.id}: unknown check '${k}'`); configIssues++; }
+  }
+  if (configIssues) console.log(`  [config] ${configIssues} case-config issue(s) — coverage may be silently skipped.`);
+
+  console.log(`Samples/case: ${SAMPLES}   Judge: ${JUDGE_MODEL} x${process.env.EVAL_JUDGE_VOTES || 1}   TDD guardrail: ${GUARDRAIL_MODE}\n`);
 
   const flatResults = [];   // every sample's CaseResult — feeds the overall summary
   const caseReports = [];   // per-case: samples (trajectory + verdict) + aggregate

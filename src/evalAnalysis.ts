@@ -168,6 +168,16 @@ export function parseJudgeVerdict(text: string): { pass: boolean; reason: string
   return { pass: false, reason: "unparseable judge response" };
 }
 
+// --- Judge majority vote (robustness) ---
+
+export function majorityVerdict(verdicts: { pass: boolean; reason?: string }[]): { pass: boolean; reason: string } {
+  if (verdicts.length === 0) return { pass: false, reason: "no verdicts" };
+  const passes = verdicts.filter(v => v.pass).length;
+  const pass = passes > verdicts.length / 2; // strict majority; tie fails closed
+  const rep = verdicts.find(v => v.pass === pass) ?? verdicts[0];
+  return { pass, reason: rep.reason ?? "" };
+}
+
 // --- N-sample aggregation (B6) ---
 
 export function aggregateSamples(results: CaseResult[]): { hardPassRate: number; checkRates: Record<string, number> } {

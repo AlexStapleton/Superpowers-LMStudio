@@ -79,6 +79,16 @@ test("parseJudgeVerdict parses clean JSON, fenced JSON, and rejects garbage", ()
   assert.equal(parseJudgeVerdict("no json here").pass, false);
 });
 
+const { majorityVerdict } = require("../dist/evalAnalysis.js");
+
+test("majorityVerdict takes the strict majority and fails closed on ties", () => {
+  assert.equal(majorityVerdict([{ pass: true }, { pass: true }, { pass: false }]).pass, true);
+  assert.equal(majorityVerdict([{ pass: false }, { pass: false }, { pass: true }]).pass, false);
+  assert.equal(majorityVerdict([{ pass: true }, { pass: false }]).pass, false); // tie -> fail
+  assert.equal(majorityVerdict([]).pass, false);
+  assert.match(majorityVerdict([{ pass: true, reason: "good" }]).reason, /good/);
+});
+
 test("aggregateSamples computes per-check and hardPass rates", () => {
   const mk = (hp, adh) => ({ id: "x", workflow: "tdd", mode: "router", hardPass: hp,
     checks: [{ name: "announce", pass: hp }, { name: "adherence", pass: adh, soft: true }] });
