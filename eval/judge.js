@@ -6,17 +6,17 @@ const { chatOnce } = require("./client.js");
 
 async function judgeAdherence({ baseUrl, model, procedure, prompt, trajectory }) {
   const judgePrompt = buildJudgePrompt(procedure, prompt, trajectory);
-  try {
-    const text = await chatOnce({
-      baseUrl,
-      model,
-      messages: [{ role: "user", content: judgePrompt }],
-      temperature: 0,
-    });
-    return parseJudgeVerdict(text);
-  } catch (e) {
-    return { pass: false, reason: `judge error: ${e.message}` };
+  const messages = [{ role: "user", content: judgePrompt }];
+  let lastErr;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const text = await chatOnce({ baseUrl, model, messages, temperature: 0 });
+      return parseJudgeVerdict(text);
+    } catch (e) {
+      lastErr = e;
+    }
   }
+  return { pass: false, reason: `judge error: ${lastErr ? lastErr.message : "unknown"}` };
 }
 
 module.exports = { judgeAdherence };

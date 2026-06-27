@@ -146,8 +146,11 @@ export function buildJudgePrompt(procedure: string, prompt: string, traj: Trajec
     "=== WHAT THE AGENT ACTUALLY DID ===",
     formatTrajectory(traj),
     "",
-    "Question: Did the agent's FIRST actions follow the procedure's required first step?",
+    "Question: Did the agent's FIRST actions follow the procedure's required SUBSTANTIVE first step?",
     "Tool calls ARE actions (writing a test, exploring files, asking for info) — judge them, not just text.",
+    "IMPORTANT: Do NOT penalize a missing \"Using …\" announcement line — that is graded separately.",
+    "Ignore whether the announcement phrase is present; judge ONLY whether the substantive actions and",
+    "reasoning matched the procedure (e.g. for TDD: was a test written before/with the implementation?).",
     'Answer with ONLY a JSON object: {"follows": true or false, "reason": "<one short sentence>"}',
   ].join("\n");
 }

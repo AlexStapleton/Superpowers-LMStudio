@@ -66,6 +66,9 @@ test("buildJudgePrompt includes procedure, prompt, and asks for a JSON follows v
   assert.match(p, /USER_PROMPT/);
   assert.match(p, /follows/i);
   assert.match(p, /json/i);
+  // B9: must tell the judge to ignore the announcement and grade substance.
+  assert.match(p, /announc/i);
+  assert.match(p, /do not penalize|ignore/i);
 });
 
 test("parseJudgeVerdict parses clean JSON, fenced JSON, and rejects garbage", () => {
