@@ -42,7 +42,7 @@ async function routerLoaded(c, ctx) {
   }
   const q = await embed(ctx.baseUrl, ctx.embedModel, [QUERY_PREFIX + c.prompt]);
   if (!q) return null;
-  const hit = semanticMatch(q[0], cachedEvalSkillEmbeddings.embeddings, ctx.semanticThreshold ?? 0.5);
+  const hit = semanticMatch(q[0], cachedEvalSkillEmbeddings.embeddings, ctx.semanticThreshold ?? 0.35, ctx.semanticMargin ?? 0.05);
   return hit ? hit.name : null;
 }
 

@@ -213,6 +213,10 @@ export const pluginConfigSchematics = createConfigSchematics()
   }, true)
   .field("semanticRouterThreshold", "string", {
     displayName: "Semantic routing threshold (0–1)",
-    subtitle: "Cosine-similarity cutoff for semantic routing. Higher = stricter / fewer false matches. Default 0.5.",
-  }, "0.5")
+    subtitle: "Minimum cosine similarity for semantic routing. Higher = stricter / fewer false matches. Default 0.35.",
+  }, "0.35")
+  .field("semanticRouterMargin", "string", {
+    displayName: "Semantic routing confidence margin",
+    subtitle: "The best-matching workflow must beat the runner-up by at least this much, or no route (avoids guessing between overlapping workflows). Default 0.05.",
+  }, "0.05")
   .build();

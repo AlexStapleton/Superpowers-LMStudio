@@ -22,17 +22,23 @@ export interface SkillEmbedding {
   vector: number[];
 }
 
+// threshold: minimum cosine of the best match. margin: the best must beat the runner-up by at least
+// this much (confidence gate) — embedding scores for these skills are compressed and several overlap
+// (verify/review/finish), so without a margin a low threshold mis-routes ambiguous prompts.
 export function semanticMatch(
   query: number[],
   skillEmbeddings: SkillEmbedding[],
   threshold: number,
+  margin = 0,
 ): { name: string; score: number } | null {
-  let best: { name: string; score: number } | null = null;
-  for (const s of skillEmbeddings) {
-    const score = cosineSimilarity(query, s.vector);
-    if (!best || score > best.score) best = { name: s.name, score };
-  }
-  return best && best.score >= threshold ? best : null;
+  const scored = skillEmbeddings
+    .map(s => ({ name: s.name, score: cosineSimilarity(query, s.vector) }))
+    .sort((a, b) => b.score - a.score);
+  if (scored.length === 0) return null;
+  const best = scored[0];
+  if (best.score < threshold) return null;
+  if (scored.length > 1 && best.score - scored[1].score < margin) return null;
+  return best;
 }
 
 /** Text embedded to represent when a skill applies — its description plus example phrasings. */

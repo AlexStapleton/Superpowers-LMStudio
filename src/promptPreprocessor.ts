@@ -26,6 +26,7 @@ async function semanticRoute(
   skills: Skill[],
   userPrompt: string,
   threshold: number,
+  margin: number,
 ): Promise<string | null> {
   try {
     const model = await ctl.client.embedding.model("nomic-ai/nomic-embed-text-v1.5-GGUF", { signal: ctl.abortSignal });
@@ -35,7 +36,7 @@ async function semanticRoute(
       cachedSkillEmbeddings = { key, embeddings: skills.map((s, i) => ({ name: s.name, vector: embs[i].embedding })) };
     }
     const [q] = await model.embed([QUERY_PREFIX + userPrompt]);
-    const hit = semanticMatch(q.embedding, cachedSkillEmbeddings.embeddings, threshold);
+    const hit = semanticMatch(q.embedding, cachedSkillEmbeddings.embeddings, threshold, margin);
     return hit ? hit.name : null;
   } catch (e) {
     ctl.debug("Semantic router unavailable; falling back to keyword-only.", e);
@@ -154,8 +155,9 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
     let routedName: string | null = keywordMatch;
     let routedVia: "keyword" | "semantic" | "none" = keywordMatch ? "keyword" : "none";
     if (!routedName && routerEnabled && pluginConfig.get("enableSemanticRouter")) {
-      const threshold = parseFloat(pluginConfig.get("semanticRouterThreshold")) || 0.5;
-      const semName = await semanticRoute(ctl, skills, userPrompt, threshold);
+      const threshold = parseFloat(pluginConfig.get("semanticRouterThreshold")) || 0.35;
+      const margin = parseFloat(pluginConfig.get("semanticRouterMargin")) || 0.05;
+      const semName = await semanticRoute(ctl, skills, userPrompt, threshold, margin);
       if (semName) { routedName = semName; routedVia = "semantic"; }
     }
 

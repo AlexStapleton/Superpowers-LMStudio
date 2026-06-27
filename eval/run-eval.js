@@ -22,7 +22,8 @@ const MAX_TURNS = Math.max(1, parseInt(process.env.EVAL_MAX_TURNS || "8", 10)); 
 const ROUTER_ON = (process.env.EVAL_ROUTER || "on") !== "off"; // model the real plugin's code router
 const SEMANTIC_ON = (process.env.EVAL_SEMANTIC || "on") !== "off"; // C1 semantic fallback
 const EMBED_MODEL = process.env.EVAL_EMBED_MODEL || "nomic-ai/nomic-embed-text-v1.5-GGUF";
-const SEMANTIC_THRESHOLD = parseFloat(process.env.EVAL_SEMANTIC_THRESHOLD || "0.5");
+const SEMANTIC_THRESHOLD = parseFloat(process.env.EVAL_SEMANTIC_THRESHOLD || "0.35");
+const SEMANTIC_MARGIN = parseFloat(process.env.EVAL_SEMANTIC_MARGIN || "0.05");
 
 async function main() {
   const model = process.env.EVAL_MODEL || (await probeEndpoint(BASE_URL));
@@ -59,7 +60,7 @@ async function main() {
 
   console.log(`Samples/case: ${SAMPLES}   Judge: ${JUDGE_MODEL} x${process.env.EVAL_JUDGE_VOTES || 1}   TDD guardrail: ${GUARDRAIL_MODE}\n`);
 
-  console.log(`Router (code-side): ${ROUTER_ON ? "on (realistic)" : "off"}   Semantic fallback: ${SEMANTIC_ON ? `on (${EMBED_MODEL} @ ${SEMANTIC_THRESHOLD})` : "off"}`);
+  console.log(`Router (code-side): ${ROUTER_ON ? "on (realistic)" : "off"}   Semantic fallback: ${SEMANTIC_ON ? `on (${EMBED_MODEL} @ thr ${SEMANTIC_THRESHOLD}, margin ${SEMANTIC_MARGIN})` : "off"}`);
   if (SEMANTIC_ON) {
     const probe = await probeEmbeddings(BASE_URL, EMBED_MODEL);
     console.log(probe.ok
@@ -70,7 +71,7 @@ async function main() {
   const ctx = {
     baseUrl: BASE_URL, model, judgeModel: JUDGE_MODEL, skills, skillByName,
     samples: SAMPLES, guardrailMode: GUARDRAIL_MODE, maxTurns: MAX_TURNS, routerOn: ROUTER_ON,
-    semanticOn: SEMANTIC_ON, embedModel: EMBED_MODEL, semanticThreshold: SEMANTIC_THRESHOLD,
+    semanticOn: SEMANTIC_ON, embedModel: EMBED_MODEL, semanticThreshold: SEMANTIC_THRESHOLD, semanticMargin: SEMANTIC_MARGIN,
     tools: [USE_WORKFLOW_TOOL, ...STUB_TOOLS],
   };
 
