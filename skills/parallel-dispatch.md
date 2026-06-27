@@ -11,7 +11,7 @@ examples:
   - "run these tasks in parallel"
 ---
 
-Open your reply with: "Using Parallel Agent Dispatch —"
+Before doing anything else — including any tool call — output the line: "Using Parallel Agent Dispatch —". Then proceed.
 
 When facing multiple independent tasks (different subsystems, different bugs with unrelated root causes):
 1. Group work into independent domains — each domain has no shared state with the others

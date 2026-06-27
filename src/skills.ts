@@ -91,7 +91,7 @@ export function renderDispatcherTable(skills: Skill[]): string {
 
 export function buildWorkflowToolResult(skill: Skill): { announce: string; instructions: string } {
   return {
-    announce: `Open your reply with: "Using ${skill.announce} —"`,
+    announce: `Before doing anything else (including any tool call), output the line: "Using ${skill.announce} —". Then proceed.`,
     instructions: skill.body,
   };
 }

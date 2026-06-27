@@ -15,7 +15,7 @@ examples:
   - "search the web for vite plugins"
 ---
 
-Open your reply with: "Using Research —"
+Before doing anything else — including any tool call — output the line: "Using Research —". Then proceed.
 
 **Invoke when:** Asked to research a topic, find information online, look something up, or answer a question requiring current or external knowledge.
 The Iron Law: **NO answers about external facts without searching first. Training data is not a substitute for a live search.**

@@ -11,7 +11,7 @@ examples:
   - "dispatch a fresh subagent for each task"
 ---
 
-Open your reply with: "Using Subagent-Driven Implementation —"
+Before doing anything else — including any tool call — output the line: "Using Subagent-Driven Implementation —". Then proceed.
 
 Read the full plan once. Extract ALL tasks with their full text and context upfront. Then execute continuously — do NOT pause to check in between tasks. The only reasons to stop are: BLOCKED status you cannot resolve, or all tasks complete.
 **Never start on main/master without explicit user consent — work on a feature branch.**

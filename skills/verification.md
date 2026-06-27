@@ -14,7 +14,7 @@ examples:
   - "did it pass"
 ---
 
-Open your reply with: "Using Verification Before Completion —"
+Before doing anything else — including any tool call — output the line: "Using Verification Before Completion —". Then proceed.
 
 **Invoke when:** About to claim work is complete, fixed, or passing — before committing or creating PRs.
 The Iron Law: **No completion claims without fresh verification evidence. Violating the letter of this rule is violating the spirit.**

@@ -14,7 +14,7 @@ examples:
   - "start on the plan"
 ---
 
-Open your reply with: "Using Executing a Written Plan —"
+Before doing anything else — including any tool call — output the line: "Using Executing a Written Plan —". Then proceed.
 
 **Never start implementation on main/master branch without explicit user consent — confirm branch first.**
 When given a written implementation plan (saved in `docs/superpowers/plans/`):

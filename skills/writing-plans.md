@@ -12,7 +12,7 @@ examples:
   - "plan out the implementation"
 ---
 
-Open your reply with: "Using Writing Plans —"
+Before doing anything else — including any tool call — output the line: "Using Writing Plans —". Then proceed.
 
 When given a spec or multi-step task, produce a complete implementation plan before touching any code.
 

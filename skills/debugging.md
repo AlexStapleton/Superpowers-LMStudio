@@ -16,7 +16,7 @@ examples:
   - "this function throws an error"
 ---
 
-Open your reply with: "Using Systematic Debugging —"
+Before doing anything else — including any tool call — output the line: "Using Systematic Debugging —". Then proceed.
 
 The Iron Law: **NO fixes without root cause investigation first.**
 - **Phase 1 — Root cause:** Read error messages fully. Reproduce consistently. Check recent changes.

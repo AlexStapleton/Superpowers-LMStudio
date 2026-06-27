@@ -10,7 +10,7 @@ examples:
   - "match the conventions in this module"
 ---
 
-Open your reply with: "Using Code Conventions Check —"
+Before doing anything else — including any tool call — output the line: "Using Code Conventions Check —". Then proceed.
 
 Before writing any new code in an existing codebase:
 1. Read 2–3 nearby files in the same directory or module (`read_file_range`, `search_in_file`)

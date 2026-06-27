@@ -15,7 +15,7 @@ examples:
   - "add a feature flag"
 ---
 
-Open your reply with: "Using Test-Driven Development —"
+Before doing anything else — including any tool call — output the line: "Using Test-Driven Development —". Then proceed.
 
 **Invoke when:** Implementing any feature or bugfix, before writing implementation code.
 The Iron Law: **NO production code without a failing test first.** Violating the letter of this rule is violating the spirit.

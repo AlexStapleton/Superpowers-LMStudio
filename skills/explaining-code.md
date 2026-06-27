@@ -15,7 +15,7 @@ examples:
   - "walk me through the auth flow"
 ---
 
-Open your reply with: "Using Code Explanation —"
+Before doing anything else — including any tool call — output the line: "Using Code Explanation —". Then proceed.
 
 You have file-system access. **NEVER ask the user to paste code you can read yourself.** Asking "please provide the code snippet" when you are sitting in a project directory is a failure — read the files.
 

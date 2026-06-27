@@ -14,7 +14,7 @@ examples:
   - "the reviewer said to rename it"
 ---
 
-Open your reply with: "Using Receiving Code Review —"
+Before doing anything else — including any tool call — output the line: "Using Receiving Code Review —". Then proceed.
 
 When receiving review feedback:
 1. Read ALL feedback before acting on any of it

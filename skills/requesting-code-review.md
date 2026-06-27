@@ -11,7 +11,7 @@ examples:
   - "please do a code review of this PR"
 ---
 
-Open your reply with: "Using Requesting Code Review —"
+Before doing anything else — including any tool call — output the line: "Using Requesting Code Review —". Then proceed.
 
 1. **Get commit range** — use `git_diff` or `execute_command("git log --oneline -5")` to identify the commits in scope
 2. **Dispatch reviewer** — call `consult_secondary_agent` with: (a) brief description of what was built, (b) the plan or requirements it must meet, (c) the diff or changed file contents

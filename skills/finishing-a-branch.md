@@ -13,7 +13,7 @@ examples:
   - "finish this feature"
 ---
 
-Open your reply with: "Using Finishing a Branch —"
+Before doing anything else — including any tool call — output the line: "Using Finishing a Branch —". Then proceed.
 
 When implementation is complete:
 1. Run the full test suite — do not proceed if tests fail
