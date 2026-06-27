@@ -14,6 +14,7 @@ import { parseSubAgentResponseMessage, type ParsedToolCall } from "./subAgentToo
 import { validateToolCall } from "./toolCallValidator";
 import { backgroundCommands, generateId, BackgroundCommand } from "./backgroundCommands";
 import { loadSkillsCached, getSkillsDirCandidates, buildWorkflowToolResult } from "./skills";
+import { appendRoutingEvent } from "./routingLog";
 
 import type { Browser, Page } from "puppeteer";
 
@@ -189,6 +190,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         if (!skill) {
           return { error: `Unknown workflow '${workflow}'. Valid: ${skillNames.join(", ")}` };
         }
+        await appendRoutingEvent(pluginConfig.get("enableDebugMode"), { kind: "tool", workflow });
         return buildWorkflowToolResult(skill);
       },
     });

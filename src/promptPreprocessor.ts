@@ -13,7 +13,8 @@ import { pluginConfigSchematics } from "./config";
 import { TOOLS_DOCUMENTATION, TOOLS_DOCUMENTATION_LITE } from "./toolsDocumentation";
 import { getPersistedState, savePersistedState } from "./stateManager";
 import { getDict } from "./locales/i18n";
-import { loadSkillsCached, getSkillsDirCandidates, renderDispatcherTable, decideRouterInjection } from "./skills";
+import { loadSkillsCached, getSkillsDirCandidates, renderDispatcherTable, decideRouterInjection, matchTriggers } from "./skills";
+import { appendRoutingEvent } from "./routingLog";
 
 type DocumentContextInjectionStrategy = "none" | "inject-full-content" | "retrieval";
 
@@ -120,19 +121,36 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
       + renderDispatcherTable(skills) + "\n\n";
     currentContent = dispatcher + currentContent;
 
-    // --- Code-side router backstop ---
-    if (pluginConfig.get("enableWorkflowRouter")) {
+    // --- Code-side router backstop (+ observability A1/A2) ---
+    const matched = matchTriggers(skills, userPrompt);
+    let routerAction: "injected" | "deduped" | "disabled" | "no-match";
+    if (!pluginConfig.get("enableWorkflowRouter")) {
+      routerAction = "disabled";
+    } else {
       const decision = decideRouterInjection(skills, userPrompt, state.lastInjectedWorkflow);
       if (decision) {
         currentContent =
           `[Workflow auto-loaded — follow this procedure now]\n${decision.body}\n\n` + currentContent;
         state.lastInjectedWorkflow = decision.name;
         await savePersistedState(state);
-      } else if (!matchedAnySkill(skills, userPrompt) && state.lastInjectedWorkflow !== null) {
-        state.lastInjectedWorkflow = null;
-        await savePersistedState(state);
+        routerAction = "injected";
+      } else if (matched) {
+        // Matched but suppressed because it equals the last-injected workflow.
+        routerAction = "deduped";
+      } else {
+        routerAction = "no-match";
+        if (state.lastInjectedWorkflow !== null) {
+          state.lastInjectedWorkflow = null;
+          await savePersistedState(state);
+        }
       }
     }
+    await appendRoutingEvent(debugMode, {
+      kind: "router",
+      matched,
+      action: routerAction,
+      promptPreview: userPrompt.slice(0, 200),
+    });
   }
 
   // --- Plan Mode & Delegation Hints (Every Turn) ---
@@ -282,12 +300,6 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
   }
   
   return userMessage;
-}
-
-function matchedAnySkill(skills: { triggers: string[] }[], text: string): boolean {
-  return skills.some(s => s.triggers.some(src => {
-    try { return new RegExp(src, "i").test(text); } catch { return false; }
-  }));
 }
 
 async function prepareRetrievalResultsContextInjection(

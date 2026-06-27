@@ -8,8 +8,9 @@
     "push": "lms push",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "test": "node --test tests/browserActions.test.js tests/fuzzySearch.test.js tests/handoffMessage.test.js tests/subAgentToolCallParser.test.js tests/promptPreprocessor.test.js tests/nodeNotifier.test.js tests/fileEditingTools.test.js tests/subAgentValidation.test.js tests/i18n.test.js tests/skills.test.js tests/skillRouting.test.js",
-    "ci": "npm run typecheck && npm run build && npm run test"
+    "test": "node --test tests/browserActions.test.js tests/fuzzySearch.test.js tests/handoffMessage.test.js tests/subAgentToolCallParser.test.js tests/promptPreprocessor.test.js tests/nodeNotifier.test.js tests/fileEditingTools.test.js tests/subAgentValidation.test.js tests/i18n.test.js tests/skills.test.js tests/skillRouting.test.js tests/routingLog.test.js",
+    "ci": "npm run typecheck && npm run build && npm run test",
+    "routing-stats": "npm run build && node scripts/routing-stats.js"
   },
   "author": "",
   "license": "GPL-3.0-or-later",
