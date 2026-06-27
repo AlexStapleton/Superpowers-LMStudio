@@ -145,8 +145,13 @@ export function scoreCase(
 
 // --- Trajectory judge (B7) ---
 
+function cap(s: string, n: number): string {
+  return s.length > n ? s.slice(0, n) + "\n…(truncated)" : s;
+}
+
 export function formatTrajectory(traj: Trajectory): string {
-  const text = traj.finalText && traj.finalText.trim() ? traj.finalText.trim() : "(no assistant text)";
+  const raw = traj.finalText && traj.finalText.trim() ? traj.finalText.trim() : "(no assistant text)";
+  const text = cap(raw, 1500);
   const calls = traj.toolCalls.length
     ? traj.toolCalls.map((c, i) => `${i + 1}. ${c.name}(${JSON.stringify(c.args)})`).join("\n")
     : "(no tool calls)";
@@ -158,7 +163,7 @@ export function buildJudgePrompt(procedure: string, prompt: string, traj: Trajec
     "You are grading whether an AI agent followed a required workflow procedure.",
     "",
     "=== WORKFLOW PROCEDURE the agent was supposed to follow ===",
-    procedure,
+    cap(procedure, 1200),
     "",
     "=== USER REQUEST ===",
     prompt,

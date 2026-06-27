@@ -153,7 +153,7 @@ async function chatOnce({ baseUrl, model, messages, temperature = 0, timeoutMs =
     {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ model, messages, temperature, stream: false }),
+      body: JSON.stringify({ model, messages, temperature, stream: false, max_tokens: 300 }),
     },
     timeoutMs,
   );
