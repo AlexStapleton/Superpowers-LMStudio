@@ -10,13 +10,15 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { loadSkills, getSkillsDirCandidates, renderDispatcherTable } = require("../dist/skills.js");
-const { scoreCase, summarize } = require("../dist/evalAnalysis.js");
+const { scoreCase, summarize, aggregateSamples } = require("../dist/evalAnalysis.js");
 const { probeEndpoint, runConversation, makeStubExecutor, USE_WORKFLOW_TOOL, STUB_TOOLS } = require("./client.js");
+const { judgeAdherence } = require("./judge.js");
 const { CASES } = require("./cases.js");
 
 const BASE_URL = process.env.EVAL_BASE_URL || "http://localhost:1234/v1";
 const MODE_FILTER = process.env.EVAL_MODE || null;
 const CASE_FILTER = process.env.EVAL_CASE || null;
+const SAMPLES = Math.max(1, parseInt(process.env.EVAL_SAMPLES || "3", 10));
 
 const DISPATCH_PREAMBLE =
   "[Workflow routing — inline guidance, NOT a task; do not search files for it.] If the user's " +
@@ -56,38 +58,59 @@ async function main() {
   if (MODE_FILTER) cases = cases.filter(c => c.mode === MODE_FILTER);
   if (CASE_FILTER) cases = cases.filter(c => c.id.includes(CASE_FILTER));
 
-  const results = [];
+  const JUDGE_MODEL = process.env.EVAL_JUDGE_MODEL || model;
+  const skillByName = new Map(skills.map(s => [s.name, s]));
+  console.log(`Samples/case: ${SAMPLES}   Judge: ${JUDGE_MODEL}\n`);
+
+  const flatResults = [];   // every sample's CaseResult — feeds the overall summary
+  const caseReports = [];   // per-case: samples (trajectory + verdict) + aggregate
+
   for (const c of cases) {
     const messages = [
       { role: "system", content: buildSystem(skills, c) },
       { role: "user", content: c.prompt },
     ];
-    let traj;
-    try {
-      traj = await runConversation({ baseUrl: BASE_URL, model, messages, tools, executeTool });
-    } catch (e) {
-      console.log(`  [${c.id}] ERROR: ${e.message}`);
-      traj = { finalText: "", toolCalls: [] };
+    const usesJudge = c.checks.includes("adherence") && c.workflow && skillByName.has(c.workflow);
+    const samples = [];
+    for (let i = 0; i < SAMPLES; i++) {
+      let traj;
+      try {
+        traj = await runConversation({ baseUrl: BASE_URL, model, messages, tools, executeTool });
+      } catch (e) {
+        traj = { finalText: "", toolCalls: [] };
+      }
+      let verdict;
+      if (usesJudge) {
+        verdict = await judgeAdherence({
+          baseUrl: BASE_URL, model: JUDGE_MODEL,
+          procedure: skillByName.get(c.workflow).body, prompt: c.prompt, trajectory: traj,
+        });
+      }
+      const r = scoreCase(c, traj, verdict);
+      flatResults.push(r);
+      samples.push({ result: r, finalText: traj.finalText, toolCalls: traj.toolCalls, verdict });
     }
-    const r = scoreCase(c, traj);
-    // Attach the trajectory so the report is diagnosable, not just a scoreboard.
-    results.push({ ...r, prompt: c.prompt, toolCalls: traj.toolCalls, finalText: traj.finalText });
-    const mark = r.hardPass ? "PASS" : "FAIL";
-    const detail = r.checks.map(k => `${k.name}${k.soft ? "*" : ""}:${k.pass ? "y" : "n"}`).join(" ");
-    console.log(`  [${mark}] ${c.id.padEnd(18)} (${c.mode}/${c.workflow ?? "benign"})  ${detail}`);
+    const agg = aggregateSamples(samples.map(s => s.result));
+    caseReports.push({ id: c.id, mode: c.mode, workflow: c.workflow, agg, samples });
+    const detail = c.checks.map(n => `${n}:${Math.round((agg.checkRates[n] ?? 0) * SAMPLES)}/${SAMPLES}`).join("  ");
+    console.log(`  ${c.id.padEnd(18)} (${c.mode}/${c.workflow ?? "benign"})  hardPass ${Math.round(agg.hardPassRate * SAMPLES)}/${SAMPLES}   ${detail}`);
   }
 
-  const s = summarize(results);
+  const s = summarize(flatResults);
+  const adh = flatResults.flatMap(r => r.checks.filter(k => k.name === "adherence"));
+  const adherenceRate = adh.length ? adh.filter(k => k.pass).length / adh.length : 0;
   const pct = n => `${Math.round(n * 100)}%`;
-  console.log("\n=== Summary ===");
-  console.log(`Cases: ${s.total}   Hard-pass: ${s.hardPass}/${s.total} (${pct(s.hardPass / s.total)})`);
-  console.log(`Announce rate:          ${pct(s.announceRate)}`);
-  console.log(`Tool-invocation rate:   ${pct(s.toolInvocationRate)}  (tool-mode cases)`);
-  console.log(`First-step (soft) rate: ${pct(s.firstStepRate)}`);
+  console.log(`\n=== Summary (averaged over ${SAMPLES} samples/case) ===`);
+  console.log(`Hard-pass (avg):      ${pct(s.hardPass / s.total)}`);
+  console.log(`Announce rate:        ${pct(s.announceRate)}`);
+  console.log(`Tool-invocation rate: ${pct(s.toolInvocationRate)}  (tool-mode)`);
+  console.log(`Adherence (judge):    ${pct(adherenceRate)}  (router cases)`);
   console.log("By workflow:", JSON.stringify(s.byWorkflow));
 
   const reportPath = path.join(__dirname, "report.json");
-  fs.writeFileSync(reportPath, JSON.stringify({ model, baseUrl: BASE_URL, summary: s, results }, null, 2));
+  fs.writeFileSync(reportPath, JSON.stringify(
+    { model, judgeModel: JUDGE_MODEL, baseUrl: BASE_URL, samples: SAMPLES, summary: { ...s, adherenceRate }, cases: caseReports },
+    null, 2));
   console.log(`\nFull report: ${reportPath}`);
 }
 

@@ -94,4 +94,18 @@ async function runConversation({ baseUrl, model, messages, tools, executeTool, m
   return { finalText, toolCalls };
 }
 
-module.exports = { probeEndpoint, runConversation, makeStubExecutor, USE_WORKFLOW_TOOL, STUB_TOOLS };
+// Single completion, no tools — used by the adherence judge.
+async function chatOnce({ baseUrl, model, messages, temperature = 0 }) {
+  const data = await fetchJson(
+    `${baseUrl}/chat/completions`,
+    {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ model, messages, temperature, stream: false }),
+    },
+    120000,
+  );
+  return data?.choices?.[0]?.message?.content || "";
+}
+
+module.exports = { probeEndpoint, runConversation, makeStubExecutor, chatOnce, USE_WORKFLOW_TOOL, STUB_TOOLS };
