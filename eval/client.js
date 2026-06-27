@@ -153,7 +153,7 @@ async function chatOnce({ baseUrl, model, messages, temperature = 0, timeoutMs =
     {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ model, messages, temperature, stream: false, max_tokens: 300 }),
+      body: JSON.stringify({ model, messages, temperature, stream: false, max_tokens: 800 }),
     },
     timeoutMs,
   );
@@ -180,4 +180,22 @@ async function embed(baseUrl, model, texts) {
   }
 }
 
-module.exports = { probeEndpoint, runConversation, makeStubExecutor, chatOnce, embed, USE_WORKFLOW_TOOL, STUB_TOOLS };
+// Diagnostic: probe the embeddings endpoint and return the actual reason on failure (instead of the
+// silent null embed() returns), so the runner can tell the user exactly what's wrong.
+async function probeEmbeddings(baseUrl, model) {
+  try {
+    const res = await fetch(`${baseUrl}/embeddings`, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ model, input: "test" }),
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}` };
+    const j = await res.json();
+    const dim = j?.data?.[0]?.embedding?.length;
+    return dim ? { ok: true, dim } : { ok: false, error: "no embedding array in response" };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+module.exports = { probeEndpoint, runConversation, makeStubExecutor, chatOnce, embed, probeEmbeddings, USE_WORKFLOW_TOOL, STUB_TOOLS };

@@ -9,7 +9,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { loadSkills, getSkillsDirCandidates } = require("../dist/skills.js");
 const { summarize } = require("../dist/evalAnalysis.js");
-const { probeEndpoint } = require("./client.js");
+const { probeEndpoint, probeEmbeddings } = require("./client.js");
 const { runCase, USE_WORKFLOW_TOOL, STUB_TOOLS } = require("./runner.js");
 const { CASES } = require("./cases.js");
 
@@ -59,7 +59,14 @@ async function main() {
 
   console.log(`Samples/case: ${SAMPLES}   Judge: ${JUDGE_MODEL} x${process.env.EVAL_JUDGE_VOTES || 1}   TDD guardrail: ${GUARDRAIL_MODE}\n`);
 
-  console.log(`Router (code-side): ${ROUTER_ON ? "on (realistic)" : "off"}   Semantic fallback: ${SEMANTIC_ON ? `on (${EMBED_MODEL} @ ${SEMANTIC_THRESHOLD})` : "off"}\n`);
+  console.log(`Router (code-side): ${ROUTER_ON ? "on (realistic)" : "off"}   Semantic fallback: ${SEMANTIC_ON ? `on (${EMBED_MODEL} @ ${SEMANTIC_THRESHOLD})` : "off"}`);
+  if (SEMANTIC_ON) {
+    const probe = await probeEmbeddings(BASE_URL, EMBED_MODEL);
+    console.log(probe.ok
+      ? `  embeddings OK (dim ${probe.dim})`
+      : `  ⚠️ embeddings UNAVAILABLE — semantic fallback will be SKIPPED. Reason: ${probe.error}\n     Fix: set EVAL_EMBED_MODEL to an id from /v1/models, and ensure an embedding model is loaded.`);
+  }
+  console.log("");
   const ctx = {
     baseUrl: BASE_URL, model, judgeModel: JUDGE_MODEL, skills, skillByName,
     samples: SAMPLES, guardrailMode: GUARDRAIL_MODE, maxTurns: MAX_TURNS, routerOn: ROUTER_ON,
