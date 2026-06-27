@@ -3,7 +3,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { runConversation, makeStubExecutor } = require("../eval/client.js");
 const { judgeAdherence } = require("../eval/judge.js");
-const { runCase } = require("../eval/runner.js");
+const { runCase, routerLoaded } = require("../eval/runner.js");
 
 const SKILLS = [{ name: "tdd", announce: "Test-Driven Development", body: "TDD body", triggers: [], examples: [], description: "d" }];
 
@@ -100,6 +100,38 @@ test("judgeAdherence parses a fenced JSON verdict from a mock model", async () =
     const v = await judgeAdherence({ baseUrl: "http://x/v1", model: "m", procedure: "p", prompt: "u", trajectory: { finalText: "x", toolCalls: [] } });
     assert.equal(v.pass, true);
     assert.match(v.reason, /test/);
+  } finally { global.fetch = orig; }
+});
+
+// --- C1: routerLoaded keyword + semantic fallback ---
+
+test("routerLoaded: keyword first, then semantic fallback via embeddings", async () => {
+  const skills = [
+    { name: "debugging", description: "Use when debugging", examples: ["it is broken"], triggers: ["\\bbug\\b"], body: "DBG" },
+    { name: "research", description: "Use when researching", examples: ["look it up"], triggers: ["\\bresearch\\b"], body: "RES" },
+  ];
+  const ctx = { skills, routerOn: true, semanticOn: true, baseUrl: "http://x/v1", embedModel: "e", semanticThreshold: 0.5 };
+
+  // keyword path — no embeddings needed
+  assert.equal(await routerLoaded({ mode: "tool", workflow: "debugging", prompt: "there is a bug here" }, ctx), "debugging");
+
+  // semantic path — novel phrasing, embeddings resolve to debugging
+  const orig = global.fetch;
+  global.fetch = async (url, opts) => ({
+    ok: true,
+    json: async () => {
+      if (url.includes("/embeddings")) {
+        const input = JSON.parse(opts.body).input;
+        return input.length === 2
+          ? { data: [{ embedding: [1, 0] }, { embedding: [0, 1] }] } // debugging, research
+          : { data: [{ embedding: [0.95, 0.05] }] };                 // query -> debugging
+      }
+      return {};
+    },
+  });
+  try {
+    const got = await routerLoaded({ mode: "tool", workflow: "debugging", prompt: "the page silently fails on a wrong password" }, ctx);
+    assert.equal(got, "debugging");
   } finally { global.fetch = orig; }
 });
 

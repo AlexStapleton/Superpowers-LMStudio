@@ -160,4 +160,24 @@ async function chatOnce({ baseUrl, model, messages, temperature = 0, timeoutMs =
   return data?.choices?.[0]?.message?.content || "";
 }
 
-module.exports = { probeEndpoint, runConversation, makeStubExecutor, chatOnce, USE_WORKFLOW_TOOL, STUB_TOOLS };
+// Embeddings via the OpenAI-compatible endpoint (for the semantic router, C1). Returns an array of
+// vectors, or null if the endpoint has no embedding model (graceful — semantic routing just skips).
+async function embed(baseUrl, model, texts) {
+  try {
+    const data = await fetchJson(
+      `${baseUrl}/embeddings`,
+      {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ model, input: texts }),
+      },
+      60000,
+    );
+    const vecs = (data?.data || []).map(d => d.embedding);
+    return vecs.length ? vecs : null;
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { probeEndpoint, runConversation, makeStubExecutor, chatOnce, embed, USE_WORKFLOW_TOOL, STUB_TOOLS };

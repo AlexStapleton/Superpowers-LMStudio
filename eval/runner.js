@@ -2,8 +2,11 @@
 // runCase runs N samples, judges adherence, scores, aggregates, and excludes infra-errored samples.
 const { renderDispatcherTable, matchTriggers } = require("../dist/skills.js");
 const { scoreCase, aggregateSamples } = require("../dist/evalAnalysis.js");
-const { runConversation, makeStubExecutor, USE_WORKFLOW_TOOL, STUB_TOOLS } = require("./client.js");
+const { semanticMatch, buildEmbeddingText } = require("../dist/semanticRouter.js");
+const { runConversation, makeStubExecutor, embed, USE_WORKFLOW_TOOL, STUB_TOOLS } = require("./client.js");
 const { judgeAdherence } = require("./judge.js");
+
+let cachedEvalSkillEmbeddings = null;
 
 const DISPATCH_PREAMBLE =
   "[Workflow routing — inline guidance, NOT a task; do not search files for it.] If the user's " +
@@ -22,19 +25,31 @@ function buildSystem(skills, c, injectWorkflowName) {
   return sys;
 }
 
-// What the system loads up front: router-mode forces the case's workflow; otherwise (realistic) the
-// code router injects whatever the regex triggers match on the prompt (often nothing — the real gap).
-function routerLoaded(skills, c, routerOn) {
+// What the system loads up front, mirroring the real plugin's hybrid router:
+//  router-mode forces the case's workflow; otherwise keyword triggers, then semantic fallback (C1).
+async function routerLoaded(c, ctx) {
   if (c.mode === "router" && c.workflow) return c.workflow;
-  if (routerOn) return matchTriggers(skills, c.prompt);
-  return null;
+  if (!ctx.routerOn) return null;
+  const kw = matchTriggers(ctx.skills, c.prompt);
+  if (kw) return kw;
+  if (!ctx.semanticOn) return null;
+  // Semantic fallback via the embeddings endpoint (skips gracefully if no embedding model).
+  const key = ctx.skills.map(s => s.name).join(",");
+  if (!cachedEvalSkillEmbeddings || cachedEvalSkillEmbeddings.key !== key) {
+    const vecs = await embed(ctx.baseUrl, ctx.embedModel, ctx.skills.map(s => buildEmbeddingText(s)));
+    if (!vecs) return null;
+    cachedEvalSkillEmbeddings = { key, embeddings: ctx.skills.map((s, i) => ({ name: s.name, vector: vecs[i] })) };
+  }
+  const q = await embed(ctx.baseUrl, ctx.embedModel, [c.prompt]);
+  if (!q) return null;
+  const hit = semanticMatch(q[0], cachedEvalSkillEmbeddings.embeddings, ctx.semanticThreshold ?? 0.5);
+  return hit ? hit.name : null;
 }
 
 // ctx: { baseUrl, model, judgeModel, skills, skillByName, samples, guardrailMode, tools }
 // Returns { caseReport, results: CaseResult[] (non-errored only), errors }.
 async function runCase(c, ctx) {
-  const routerOn = ctx.routerOn !== false;
-  const loaded = routerLoaded(ctx.skills, c, routerOn); // workflow the router pre-injects (or null)
+  const loaded = await routerLoaded(c, { ...ctx, routerOn: ctx.routerOn !== false }); // router pre-injects (or null)
   const messages = [
     { role: "system", content: buildSystem(ctx.skills, c, loaded) },
     { role: "user", content: c.prompt },
@@ -74,4 +89,4 @@ async function runCase(c, ctx) {
   return { caseReport: { id: c.id, mode: c.mode, workflow: c.workflow, agg, samples }, results, errors };
 }
 
-module.exports = { buildSystem, runCase, USE_WORKFLOW_TOOL, STUB_TOOLS };
+module.exports = { buildSystem, runCase, routerLoaded, USE_WORKFLOW_TOOL, STUB_TOOLS };
