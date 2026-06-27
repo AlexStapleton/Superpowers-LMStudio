@@ -12,7 +12,8 @@
     "ci": "npm run typecheck && npm run build && npm run test",
     "routing-stats": "npm run build && node scripts/routing-stats.js",
     "eval": "npm run build && node eval/run-eval.js",
-    "judge-calibration": "npm run build && node eval/calibrate-judge.js"
+    "judge-calibration": "npm run build && node eval/calibrate-judge.js",
+    "semantic-probe": "npm run build && node eval/semantic-probe.js"
   },
   "author": "",
   "license": "GPL-3.0-or-later",
