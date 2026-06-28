@@ -1,6 +1,6 @@
 ---
 name: requesting-code-review
-description: Use when completing a task or major feature, to verify the work before proceeding or merging
+description: Use to get completed code reviewed for correctness, bugs, and quality by a reviewer before merging
 announce: Requesting Code Review
 triggers:
   - "review (my|this|the|our) (code|change|changes|pr|implementation|diff|work)"

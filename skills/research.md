@@ -1,6 +1,6 @@
 ---
 name: research
-description: Use when asked to research, look something up, or answer from external/current knowledge
+description: Use to look up current or external information — answering how-to, best-practice, "what's the recommended way", or library-recommendation questions that need a web search or current knowledge
 announce: Research
 triggers:
   - "\\bresearch\\b"

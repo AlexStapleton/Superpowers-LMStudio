@@ -1,6 +1,6 @@
 ---
 name: finishing-a-branch
-description: Use when implementation is complete and ready to ship, merge, or open a PR
+description: Use to integrate finished, verified work — merge the branch, open a pull request, or ship it (the final integration step)
 announce: Finishing a Branch
 triggers:
   - "ready to (merge|ship|finish)"

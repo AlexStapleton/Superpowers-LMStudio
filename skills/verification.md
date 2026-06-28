@@ -1,6 +1,6 @@
 ---
 name: verification
-description: Use before claiming work is complete, fixed, or passing
+description: Use to confirm that finished work actually runs and passes — run the tests/commands and check the output — before claiming it is done
 announce: Verification Before Completion
 triggers:
   - "\\b(is|are) .{0,25}\\b(done|fixed|finished|complete)\\b"
