@@ -1,6 +1,6 @@
 ---
 name: debugging
-description: Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes
+description: Use when something is buggy or wrong — a bug, test failure, crash, error, or code that produces the WRONG result / incorrect output — and you need to find the root cause before proposing fixes
 announce: Systematic Debugging
 priority: 20
 triggers:
@@ -14,12 +14,15 @@ triggers:
   - "\\bbroke(n)?\\b"
   - "\\bregression\\b"
   - "stack ?trace"
+  - "figure out (why|what'?s (wrong|going on|happening)|the (cause|problem|issue|reason))"
+  - "(wrong|incorrect|bad) (value|result|output|answer|total|number|amount|count|data)"
+  - "comes out (wrong|incorrect)"
 examples:
   - "there is a bug in the login flow"
   - "the tests are failing"
   - "this function throws an error"
   - "the build is broken"
-  - "here's the stack trace"
+  - "the total comes out wrong when a discount is applied — figure out why"
 ---
 
 Before doing anything else — including any tool call — output the line: "Using Systematic Debugging —". Then proceed.
