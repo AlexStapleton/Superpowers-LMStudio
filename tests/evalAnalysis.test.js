@@ -74,11 +74,13 @@ test("scoreCase: soft firstStep does not gate hardPass", () => {
 
 const { formatTrajectory, buildJudgePrompt, parseJudgeVerdict, aggregateSamples } = require("../dist/evalAnalysis.js");
 
-test("formatTrajectory lists assistant text and tool calls in order", () => {
+test("formatTrajectory lists assistant text and tool calls in order, flagging blocked calls", () => {
   const traj = { finalText: "hello there", toolCalls: [{ name: "use_workflow", args: { workflow: "tdd" } }, { name: "save_file", args: { file_name: "a.py" } }] };
   const s = formatTrajectory(traj);
   assert.match(s, /hello there/);
   assert.ok(s.indexOf("use_workflow") < s.indexOf("save_file"));
+  // blocked calls are annotated so the judge doesn't count them
+  assert.match(formatTrajectory({ finalText: "", toolCalls: [{ name: "save_file", args: {}, status: "BLOCKED" }] }), /BLOCKED — did NOT execute/);
 });
 
 test("buildJudgePrompt includes procedure, prompt, and asks for a JSON follows verdict", () => {

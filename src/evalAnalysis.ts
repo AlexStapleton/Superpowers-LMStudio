@@ -9,6 +9,8 @@
 export interface ToolCall {
   name: string;
   args: Record<string, any>;
+  /** Outcome tag: "ok" | "BLOCKED" | "error" — a blocked/errored call did not actually execute. */
+  status?: string;
 }
 export interface Trajectory {
   finalText: string;
@@ -153,7 +155,12 @@ export function formatTrajectory(traj: Trajectory): string {
   const raw = traj.finalText && traj.finalText.trim() ? traj.finalText.trim() : "(no assistant text)";
   const text = cap(raw, 1500);
   const calls = traj.toolCalls.length
-    ? traj.toolCalls.map((c, i) => `${i + 1}. ${c.name}(${JSON.stringify(c.args)})`).join("\n")
+    ? traj.toolCalls
+        .map((c, i) => {
+          const tag = c.status && c.status !== "ok" ? ` [${c.status} — did NOT execute]` : "";
+          return `${i + 1}. ${c.name}(${JSON.stringify(c.args)})${tag}`;
+        })
+        .join("\n")
     : "(no tool calls)";
   return `Assistant text:\n${text}\n\nTool calls (in order):\n${calls}`;
 }
@@ -173,6 +180,9 @@ export function buildJudgePrompt(procedure: string, prompt: string, traj: Trajec
     "",
     "Question: Did the agent's FIRST actions follow the procedure's required SUBSTANTIVE first step?",
     "Tool calls ARE actions (writing a test, exploring files, asking for info) — judge them, not just text.",
+    "A tool call tagged '[BLOCKED — did NOT execute]' was rejected (e.g. by a guardrail) and did NOT happen;",
+    "do NOT count it. For TDD: if the first save of production code was BLOCKED and a test was written next,",
+    "the agent DID follow test-first.",
     "IMPORTANT: Do NOT penalize a missing \"Using …\" announcement line — that is graded separately.",
     "Ignore whether the announcement phrase is present; judge ONLY whether the substantive actions and",
     "reasoning matched the procedure (e.g. for TDD: was a test written before/with the implementation?).",

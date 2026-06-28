@@ -137,8 +137,16 @@ async function runConversation({ baseUrl, model, messages, tools, executeTool, m
     for (const call of calls) {
       let args = {};
       try { args = JSON.parse(call.function?.arguments || "{}"); } catch { /* leave {} */ }
-      toolCalls.push({ name: call.function?.name, args });
       const result = await executeTool(call.function?.name, args);
+      // Tag the outcome so the trajectory (and the judge) can tell a blocked/errored call from a real
+      // one — e.g. a guardrail-blocked save must NOT read as "wrote the file".
+      let status = "ok";
+      try {
+        const parsed = JSON.parse(result);
+        if (parsed.blocked) status = "BLOCKED";
+        else if (parsed.error) status = "error";
+      } catch { /* non-JSON result */ }
+      toolCalls.push({ name: call.function?.name, args, status });
       convo.push({ role: "tool", tool_call_id: call.id, content: typeof result === "string" ? result : JSON.stringify(result) });
     }
   }
@@ -153,7 +161,7 @@ async function chatOnce({ baseUrl, model, messages, temperature = 0, timeoutMs =
     {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ model, messages, temperature, stream: false, max_tokens: 800 }),
+      body: JSON.stringify({ model, messages, temperature, stream: false, max_tokens: 1500 }),
     },
     timeoutMs,
   );
