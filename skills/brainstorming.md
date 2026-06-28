@@ -6,7 +6,7 @@ priority: 20
 triggers:
   - "new feature"
   - "let'?s (build|make|create|add)"
-  - "i want (to build|to make|a)"
+  - "i want to (build|make|create|add|design)"
   - "design (a|the|me)"
   - "build me"
   - "add (support for|the ability)"
