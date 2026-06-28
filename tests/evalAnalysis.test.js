@@ -2,8 +2,14 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   checkAnnounce, checkToolInvoked, checkNoWorkflow, checkFirstStep, scoreCase, summarize,
-  summarizeRouting,
+  summarizeRouting, checkDelegated,
 } = require("../dist/evalAnalysis.js");
+
+test("checkDelegated detects a consult_secondary_agent call (soft signal)", () => {
+  assert.equal(checkDelegated([{ name: "consult_secondary_agent", args: { task: "x" } }]).pass, true);
+  assert.equal(checkDelegated([{ name: "read_file", args: {} }]).pass, false);
+  assert.equal(checkDelegated([]).soft, true); // never gates hardPass
+});
 
 test("summarizeRouting computes recall, benign precision, misroutes, false positives (B3)", () => {
   const r = summarizeRouting([

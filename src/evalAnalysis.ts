@@ -67,6 +67,13 @@ export function checkToolInvoked(toolCalls: ToolCall[], workflow: string | null)
   return { name: "toolInvoked", pass, soft: true, detail: pass ? undefined : `no use_workflow(${workflow}) call` };
 }
 
+// Did the agent delegate to a sub-agent (consult_secondary_agent)? Soft/informational signal for the
+// sub-agent orchestration workflows — the judge grades whether the delegation was done WELL.
+export function checkDelegated(toolCalls: ToolCall[]): CheckResult {
+  const pass = toolCalls.some(c => c.name === "consult_secondary_agent");
+  return { name: "delegated", pass, soft: true, detail: pass ? undefined : "no consult_secondary_agent call" };
+}
+
 // Realistic mode: did the workflow load by EITHER path — the code router matching the prompt, or the
 // model calling use_workflow? This is the metric that reflects the actual hybrid plugin.
 export function checkWorkflowLoaded(
@@ -141,6 +148,7 @@ export function scoreCase(
           ? { name: "announce", pass: true, detail: "code-surfaced via status (router auto-load)" }
           : checkAnnounce(traj.finalText, c.announce);
       case "toolInvoked": return checkToolInvoked(traj.toolCalls, c.workflow);
+      case "delegated": return checkDelegated(traj.toolCalls);
       case "workflowLoaded": return checkWorkflowLoaded(traj.toolCalls, c.workflow, opts.routerMatched);
       case "noWorkflow": return checkNoWorkflow(traj.toolCalls, traj.finalText);
       case "firstStep": return checkFirstStep(c.workflow, traj.finalText);

@@ -10,6 +10,20 @@ test("classifyProbe distinguishes auth / no-model / not-running / ok", () => {
   assert.equal(classifyProbe({ status: 200, modelCount: 0 }), "no-model");
   assert.equal(classifyProbe({ status: 200, modelCount: 3 }), "ok");
 });
+test("stub consult_secondary_agent: reviewer returns findings; implementer saves a verifiable file", async () => {
+  const exec = makeStubExecutor([]);
+  const review = JSON.parse(await exec("consult_secondary_agent", { task: "review my code", agent_role: "reviewer" }));
+  assert.match(review.result, /review|finding/i);
+
+  const impl = JSON.parse(await exec("consult_secondary_agent", { task: "add endpoint", agent_role: "coder", allow_tools: true }));
+  assert.match(impl.result, /\[GENERATED_FILES\]/);
+  // The implementer's file is really on disk in the sandbox — so "verify independently" is exercisable.
+  const ls = JSON.parse(await exec("list_directory", { path: "." }));
+  assert.ok(ls.files.includes("src/subagent_output.js"));
+  const read = JSON.parse(await exec("read_file", { file_name: "src/subagent_output.js" }));
+  assert.ok(read.content && !read.error);
+});
+
 const { judgeAdherence } = require("../eval/judge.js");
 const { runCase, routerLoaded } = require("../eval/runner.js");
 

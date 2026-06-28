@@ -93,6 +93,19 @@ const CASES = [
     prompt: "Let's build a CSV exporter function for the reports page.",
     checks: ["workflowLoaded"] },
 
+  // --- sub-agent orchestration: did it delegate a self-contained task AND verify independently? ---
+  // router mode = procedure pre-injected; we measure the orchestration, not the routing. `delegated`
+  // is a soft signal (called consult_secondary_agent); `adherence` is the judge grading it done WELL.
+  { id: "subagent-impl-router", mode: "router", workflow: "subagent-driven", announce: "Subagent-Driven Implementation",
+    prompt: "Hand the remove-widget endpoint off to a sub-agent to implement, then make sure it actually landed.",
+    checks: ["announce", "delegated", "adherence"] },
+  { id: "review-dispatch-router", mode: "router", workflow: "requesting-code-review", announce: "Requesting Code Review",
+    prompt: "My change is finished — have a sub-agent review it for correctness before we merge.",
+    checks: ["announce", "delegated", "adherence"] },
+  { id: "parallel-fanout-router", mode: "router", workflow: "parallel-dispatch", announce: "Parallel Agent Dispatch",
+    prompt: "These three doc files each need an unrelated update — fan them out so they run independently.",
+    checks: ["announce", "delegated", "adherence"] },
+
   // --- more benign negatives (false-positive hunting) ---
   { id: "benign-greeting", mode: "tool", workflow: null,
     prompt: "Morning! How's it going today?",
