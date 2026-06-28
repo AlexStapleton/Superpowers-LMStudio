@@ -16,6 +16,7 @@ import { backgroundCommands, generateId, BackgroundCommand } from "./backgroundC
 import { loadSkillsCached, getSkillsDirCandidates, buildWorkflowToolResult } from "./skills";
 import { appendRoutingEvent } from "./routingLog";
 import { isTestFile, evaluateGuardrail, type TddGuardrailMode } from "./guardrails";
+import { findSystemBrowserPath } from "./findBrowser";
 
 import type { Browser, Page } from "puppeteer";
 
@@ -1471,6 +1472,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         if (!sharedBrowser) {
           const puppeteer = await import("puppeteer");
           sharedBrowser = await puppeteer.launch({
+            executablePath: findSystemBrowserPath(),
             headless: true,
             args: ["--no-sandbox", "--disable-setuid-sandbox"],
           });
@@ -2138,6 +2140,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
 
         const puppeteer = await import("puppeteer");
         const browser = await puppeteer.launch({
+          executablePath: findSystemBrowserPath(),
           headless: true,
           args: ["--no-sandbox", "--disable-setuid-sandbox"],
         });
@@ -2336,6 +2339,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         // Dynamically import puppeteer
         const puppeteer = await import("puppeteer");
         browser = await puppeteer.launch({
+          executablePath: findSystemBrowserPath(),
           headless: true,
           args: ["--no-sandbox", "--disable-setuid-sandbox"],
         });
@@ -3014,6 +3018,7 @@ Always assume relative paths are from this directory.`;
                       }
                       const puppeteer = await import("puppeteer");
                       const browser = await puppeteer.launch({
+                        executablePath: findSystemBrowserPath(),
                         headless: true,
                         args: ["--no-sandbox", "--disable-setuid-sandbox"],
                       });
