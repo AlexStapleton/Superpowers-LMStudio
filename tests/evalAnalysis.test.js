@@ -102,25 +102,34 @@ test("formatTrajectory lists assistant text and tool calls in order, flagging bl
   assert.match(formatTrajectory({ finalText: "", toolCalls: [{ name: "save_file", args: {}, status: "BLOCKED" }] }), /BLOCKED — did NOT execute/);
 });
 
-test("buildJudgePrompt includes procedure, prompt, and asks for a JSON follows verdict", () => {
+test("buildJudgePrompt includes procedure, prompt, and asks for a labeled VERDICT", () => {
   const p = buildJudgePrompt("PROCEDURE_BODY", "USER_PROMPT", { finalText: "x", toolCalls: [] });
   assert.match(p, /PROCEDURE_BODY/);
   assert.match(p, /USER_PROMPT/);
-  assert.match(p, /follows/i);
-  assert.match(p, /json/i);
+  assert.match(p, /VERDICT/);
+  assert.match(p, /PASS|FAIL/);
   // B9: must tell the judge to ignore the announcement and grade substance.
   assert.match(p, /announc/i);
   assert.match(p, /do not penalize|ignore/i);
 });
 
-test("parseJudgeVerdict parses clean JSON, fenced JSON, and rejects garbage", () => {
+test("parseJudgeVerdict reads labeled VERDICT lines (reliable for small judges)", () => {
+  const pass = parseJudgeVerdict("Looks good.\nVERDICT: PASS\nREASON: wrote a test first");
+  assert.equal(pass.pass, true);
+  assert.match(pass.reason, /test first/);
+  assert.equal(parseJudgeVerdict("VERDICT: FAIL\nREASON: jumped to a fix").pass, false);
+  // tolerates markdown bold the model adds
+  assert.equal(parseJudgeVerdict("**VERDICT:** PASS\n**REASON:** ok").pass, true);
+});
+
+test("parseJudgeVerdict still parses clean JSON, fenced JSON, and rejects garbage", () => {
   assert.equal(parseJudgeVerdict('{"follows": true, "reason": "wrote a test first"}').pass, true);
   const fenced = parseJudgeVerdict('Sure!\n```json\n{"follows": false, "reason": "jumped to a fix"}\n```');
   assert.equal(fenced.pass, false);
   assert.match(fenced.reason, /fix/);
-  assert.equal(parseJudgeVerdict("no json here").pass, false);
+  assert.equal(parseJudgeVerdict("no verdict here").pass, false);
   // unparseable is a JUDGE error (excluded from adherence), not a genuine "did not follow"
-  assert.equal(parseJudgeVerdict("no json here").error, true);
+  assert.equal(parseJudgeVerdict("no verdict here").error, true);
   assert.equal(parseJudgeVerdict('{"follows": true, "reason": "ok"}').error, undefined);
 });
 

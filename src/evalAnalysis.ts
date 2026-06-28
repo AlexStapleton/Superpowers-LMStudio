@@ -186,11 +186,23 @@ export function buildJudgePrompt(procedure: string, prompt: string, traj: Trajec
     "IMPORTANT: Do NOT penalize a missing \"Using …\" announcement line — that is graded separately.",
     "Ignore whether the announcement phrase is present; judge ONLY whether the substantive actions and",
     "reasoning matched the procedure (e.g. for TDD: was a test written before/with the implementation?).",
-    'Answer with ONLY a JSON object: {"follows": true or false, "reason": "<one short sentence>"}',
+    "",
+    "End your reply with exactly these two lines and nothing after them:",
+    "VERDICT: PASS   (if it followed the procedure)   or   VERDICT: FAIL   (if it did not)",
+    "REASON: <one short sentence>",
   ].join("\n");
 }
 
 export function parseJudgeVerdict(text: string): { pass: boolean; reason: string; error?: boolean } {
+  // 1) Simple labeled verdict — far more reliable for small judge models than JSON, so a 12B can
+  //    judge a 12B (one model in VRAM) instead of needing a larger judge that spills to RAM.
+  const v = text.match(/\bVERDICT\s*[:=]\s*\**\s*(PASS|FAIL|YES|NO|TRUE|FALSE)/i);
+  if (v) {
+    const pass = /^(PASS|YES|TRUE)$/i.test(v[1]);
+    const r = text.match(/\bREASON\s*[:=]\s*(.+)/i);
+    return { pass, reason: r ? r[1].replace(/\*+/g, "").trim().slice(0, 300) : "" };
+  }
+  // 2) JSON {"follows": bool} — kept for stronger judges that reliably emit JSON.
   const match = text.match(/\{[^{}]*"follows"[\s\S]*?\}/);
   if (match) {
     try {
@@ -200,9 +212,12 @@ export function parseJudgeVerdict(text: string): { pass: boolean; reason: string
       /* fall through */
     }
   }
-  // A judge that emits non-JSON is a JUDGE failure, not a "did not follow" verdict — flag it as an
-  // error so the runner EXCLUDES it from the adherence rate (weak judge models, e.g. a 12B judging a
-  // 12B, do this often; counting it as a fail silently deflates adherence).
+  // 3) Loose fallback: a bare follows=true/false anywhere.
+  const loose = text.match(/"?follows"?\s*[:=]\s*(true|false)/i);
+  if (loose) return { pass: /true/i.test(loose[1]), reason: "" };
+  // A judge that emits none of the above is a JUDGE failure, not a "did not follow" verdict — flag it
+  // as an error so the runner EXCLUDES it from the adherence rate (counting it as a fail deflates the
+  // metric). With the labeled format above this should now be rare even on a 12B.
   return { pass: false, error: true, reason: "unparseable judge response" };
 }
 
