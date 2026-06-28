@@ -13,6 +13,8 @@ export interface PluginState {
   /** Locale ID to use for Layer 1 (Config UI) on next plugin restart. "auto" = OS detection. */
   uiLanguageOverride: string;
   lastInjectedWorkflow: string | null;
+  /** Turns since the active workflow body was last injected — drives periodic re-injection (C4). */
+  turnsSinceWorkflowInject: number;
 }
 
 function resolveWorkspaceDirectory(configuredWorkspacePath?: string): string {
@@ -39,6 +41,7 @@ export async function getPersistedState(configuredWorkspacePath?: string): Promi
       subAgentDocsInjected: state.subAgentDocsInjected ?? false,
       uiLanguageOverride: state.uiLanguageOverride ?? "auto",
       lastInjectedWorkflow: state.lastInjectedWorkflow ?? null,
+      turnsSinceWorkflowInject: state.turnsSinceWorkflowInject ?? 0,
     };
   } catch (error) {
     return {
@@ -48,6 +51,7 @@ export async function getPersistedState(configuredWorkspacePath?: string): Promi
       subAgentDocsInjected: false,
       uiLanguageOverride: "auto",
       lastInjectedWorkflow: null,
+      turnsSinceWorkflowInject: 0,
     };
   }
 }

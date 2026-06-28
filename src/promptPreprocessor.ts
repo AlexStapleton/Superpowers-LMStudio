@@ -13,7 +13,7 @@ import { pluginConfigSchematics } from "./config";
 import { TOOLS_DOCUMENTATION, TOOLS_DOCUMENTATION_LITE } from "./toolsDocumentation";
 import { getPersistedState, savePersistedState } from "./stateManager";
 import { getDict } from "./locales/i18n";
-import { loadSkillsCached, getSkillsDirCandidates, renderDispatcherCompact, matchTriggers, type Skill } from "./skills";
+import { loadSkillsCached, getSkillsDirCandidates, renderDispatcherCompact, matchTriggers, decideWorkflowInjection, type InjectionAction, type Skill } from "./skills";
 import { appendRoutingEvent } from "./routingLog";
 import { semanticMatch, buildEmbeddingText, QUERY_PREFIX, DOC_PREFIX, type SkillEmbedding } from "./semanticRouter";
 
@@ -155,25 +155,32 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
       if (semName) { routedName = semName; routedVia = "semantic"; }
     }
 
-    let routerAction: "injected" | "deduped" | "disabled" | "no-match";
+    let routerAction: InjectionAction | "disabled";
     let bodyInjected = false;
     if (!routerEnabled) {
       routerAction = "disabled";
-    } else if (routedName && routedName !== state.lastInjectedWorkflow) {
-      const skill = skills.find(s => s.name === routedName);
-      if (skill) {
-        currentContent = `[Workflow auto-loaded — follow this procedure now]\n${skill.body}\n\n` + currentContent;
-        bodyInjected = true;
-      }
-      state.lastInjectedWorkflow = routedName;
-      await savePersistedState(state);
-      routerAction = "injected";
-    } else if (routedName) {
-      routerAction = "deduped"; // matched but suppressed (== last-injected)
     } else {
-      routerAction = "no-match";
-      if (state.lastInjectedWorkflow !== null) {
-        state.lastInjectedWorkflow = null;
+      // Re-inject the active procedure every N turns so it doesn't scroll out of context (C4).
+      const reinjectInterval = parseInt(pluginConfig.get("workflowReinjectInterval"), 10);
+      const decision = decideWorkflowInjection(
+        routedName,
+        { lastInjectedWorkflow: state.lastInjectedWorkflow, turnsSinceWorkflowInject: state.turnsSinceWorkflowInject },
+        Number.isFinite(reinjectInterval) ? reinjectInterval : 4,
+      );
+      routerAction = decision.action;
+      if (decision.action === "injected" || decision.action === "reinjected") {
+        const skill = routedName ? skills.find(s => s.name === routedName) : undefined;
+        if (skill) {
+          currentContent = `[Workflow auto-loaded — follow this procedure now]\n${skill.body}\n\n` + currentContent;
+          bodyInjected = true;
+        }
+      }
+      if (
+        decision.nextState.lastInjectedWorkflow !== state.lastInjectedWorkflow ||
+        decision.nextState.turnsSinceWorkflowInject !== state.turnsSinceWorkflowInject
+      ) {
+        state.lastInjectedWorkflow = decision.nextState.lastInjectedWorkflow;
+        state.turnsSinceWorkflowInject = decision.nextState.turnsSinceWorkflowInject;
         await savePersistedState(state);
       }
     }

@@ -148,6 +148,39 @@ export function renderDispatcherTable(skills: Skill[]): string {
  * Cheaper per turn than the markdown table and less prone to small-model overthinking,
  * while still naming each workflow + what it does so the model can self-route via use_workflow.
  */
+export type InjectionAction = "injected" | "reinjected" | "deduped" | "no-match";
+export interface InjectionState {
+  lastInjectedWorkflow: string | null;
+  turnsSinceWorkflowInject: number;
+}
+
+/**
+ * Decide whether to (re)inject the matched workflow body (C4). Pure + testable.
+ * - new match → inject (counter resets)
+ * - same match, counter reached the interval → re-inject so the procedure doesn't scroll out of
+ *   context on long sessions (counter resets)
+ * - same match, below interval → dedup (counter++)
+ * - no match → clear the active workflow
+ * reinjectInterval <= 0 disables re-injection (old "inject once then suppress forever" behavior).
+ */
+export function decideWorkflowInjection(
+  routedName: string | null,
+  state: InjectionState,
+  reinjectInterval: number,
+): { action: InjectionAction; nextState: InjectionState } {
+  if (!routedName) {
+    return { action: "no-match", nextState: { lastInjectedWorkflow: null, turnsSinceWorkflowInject: 0 } };
+  }
+  if (routedName !== state.lastInjectedWorkflow) {
+    return { action: "injected", nextState: { lastInjectedWorkflow: routedName, turnsSinceWorkflowInject: 0 } };
+  }
+  const turns = state.turnsSinceWorkflowInject + 1;
+  if (reinjectInterval > 0 && turns >= reinjectInterval) {
+    return { action: "reinjected", nextState: { lastInjectedWorkflow: routedName, turnsSinceWorkflowInject: 0 } };
+  }
+  return { action: "deduped", nextState: { lastInjectedWorkflow: routedName, turnsSinceWorkflowInject: turns } };
+}
+
 export function renderDispatcherCompact(skills: Skill[]): string {
   return [...skills]
     .sort(byPrecedence)

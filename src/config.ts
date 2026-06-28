@@ -219,6 +219,10 @@ export const pluginConfigSchematics = createConfigSchematics()
     displayName: "Semantic routing confidence margin",
     subtitle: "The best-matching workflow must beat the runner-up by at least this much, or no route (avoids guessing between overlapping workflows). Default 0.05.",
   }, "0.05")
+  .field("workflowReinjectInterval", "string", {
+    displayName: "Workflow re-injection interval (turns)",
+    subtitle: "On a long session the loaded workflow procedure scrolls out of context. Re-inject it after this many turns while the same workflow still matches. 0 = never re-inject. Default 4.",
+  }, "4")
   .field("embeddingModelId", "string", {
     displayName: "Embedding model (semantic routing / RAG)",
     subtitle: "Model identifier used for semantic routing and local RAG. Set this to an embedding model you have loaded in LM Studio (e.g. 'text-embedding-nomic-embed-text-v2-moe'). If it can't load, semantic routing falls back to keyword-only.",

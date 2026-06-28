@@ -147,6 +147,37 @@ test("loadSkills returns [] for a missing dir (graceful)", async () => {
   assert.deepEqual(skills, []);
 });
 
+const { decideWorkflowInjection } = require("../dist/skills.js");
+
+test("decideWorkflowInjection: new match injects and resets the counter (C4)", () => {
+  const d = decideWorkflowInjection("tdd", { lastInjectedWorkflow: null, turnsSinceWorkflowInject: 0 }, 4);
+  assert.equal(d.action, "injected");
+  assert.deepEqual(d.nextState, { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 0 });
+});
+
+test("decideWorkflowInjection: same match dedups until the interval, then re-injects", () => {
+  let s = { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 0 };
+  const a = decideWorkflowInjection("tdd", s, 3); // 0->1
+  assert.equal(a.action, "deduped");
+  const b = decideWorkflowInjection("tdd", a.nextState, 3); // 1->2
+  assert.equal(b.action, "deduped");
+  const c = decideWorkflowInjection("tdd", b.nextState, 3); // 2->3 == interval
+  assert.equal(c.action, "reinjected");
+  assert.equal(c.nextState.turnsSinceWorkflowInject, 0);
+});
+
+test("decideWorkflowInjection: interval 0 disables re-injection (suppress forever)", () => {
+  let s = { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 99 };
+  const d = decideWorkflowInjection("tdd", s, 0);
+  assert.equal(d.action, "deduped");
+});
+
+test("decideWorkflowInjection: no match clears the active workflow", () => {
+  const d = decideWorkflowInjection(null, { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 2 }, 4);
+  assert.equal(d.action, "no-match");
+  assert.equal(d.nextState.lastInjectedWorkflow, null);
+});
+
 const { loadSkillsCached, skillsSignature } = require("../dist/skills.js");
 
 test("loadSkillsCached re-parses when a skill file changes mtime (G2)", async () => {
