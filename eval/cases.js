@@ -49,6 +49,62 @@ const CASES = [
   { id: "benign-math", mode: "tool", workflow: null,
     prompt: "Quick one — what's 17 times 23?",
     checks: ["noWorkflow"] },
+
+  // --- more tool-mode cases (broader intent coverage; phrasings avoid the triggers) ---
+  { id: "tdd-tool", mode: "tool", workflow: "tdd", announce: "Test-Driven Development",
+    prompt: "I want a rate limiter for the API client — go ahead and build it out for me.",
+    checks: ["workflowLoaded", "toolInvoked", "announce"] },
+  { id: "review-request-tool", mode: "tool", workflow: "requesting-code-review", announce: "Requesting Code Review",
+    prompt: "Could you have someone look over my changes and tell me whether they're solid before I merge?",
+    checks: ["workflowLoaded", "toolInvoked", "announce"] },
+  { id: "review-receive-tool", mode: "tool", workflow: "receiving-code-review", announce: "Receiving Code Review",
+    prompt: "The reviewer left a bunch of notes on my PR — help me work through each one.",
+    checks: ["workflowLoaded", "toolInvoked", "announce"] },
+  { id: "plan-exec-tool", mode: "tool", workflow: "executing-a-plan", announce: "Executing a Written Plan",
+    prompt: "We already wrote the plan down. Let's start working through it one task at a time.",
+    checks: ["workflowLoaded", "toolInvoked", "announce"] },
+  { id: "plans-tool", mode: "tool", workflow: "writing-plans", announce: "Writing Plans",
+    prompt: "The spec is signed off. Map out the implementation as an ordered set of steps before we touch code.",
+    checks: ["workflowLoaded", "toolInvoked", "announce"] },
+
+  // --- more router-mode cases (body pre-injected → announce + first-step adherence) ---
+  { id: "verify-router", mode: "router", workflow: "verification", announce: "Verification Before Completion",
+    prompt: "Before I tell the team it's shipped, make sure the whole thing actually passes.",
+    checks: ["announce", "adherence"] },
+  { id: "finish-router", mode: "router", workflow: "finishing-a-branch", announce: "Finishing a Branch",
+    prompt: "Everything's reviewed and green. Take it from here and get it merged.",
+    checks: ["announce", "adherence"] },
+  { id: "research-router", mode: "router", workflow: "research", announce: "Research",
+    prompt: "Figure out which testing framework the React community is standardizing on these days.",
+    checks: ["announce", "adherence"] },
+  { id: "explain-router", mode: "router", workflow: "explaining-code", announce: "Code Explanation",
+    prompt: "Help me get my head around how the request-routing layer in this repo actually flows.",
+    checks: ["announce", "adherence"] },
+  { id: "review-request-router", mode: "router", workflow: "requesting-code-review", announce: "Requesting Code Review",
+    prompt: "The implementation's complete — get it reviewed for correctness and quality before we ship.",
+    checks: ["announce", "adherence"] },
+
+  // --- precedence: prompts that match two skills; the higher-priority gate must win (C2) ---
+  { id: "prec-verify-over-finish", mode: "tool", workflow: "verification", announce: "Verification Before Completion",
+    prompt: "Is the feature done? Ready to merge the branch once it is.",
+    checks: ["workflowLoaded"] },
+  { id: "prec-brainstorm-over-tdd", mode: "tool", workflow: "brainstorming", announce: "Brainstorming",
+    prompt: "Let's build a CSV exporter function for the reports page.",
+    checks: ["workflowLoaded"] },
+
+  // --- more benign negatives (false-positive hunting) ---
+  { id: "benign-greeting", mode: "tool", workflow: null,
+    prompt: "Morning! How's it going today?",
+    checks: ["noWorkflow"] },
+  { id: "benign-open-file", mode: "tool", workflow: null,
+    prompt: "Open up the config file for me.",
+    checks: ["noWorkflow"] },
+  { id: "benign-opinion", mode: "tool", workflow: null,
+    prompt: "Out of curiosity, do you prefer tabs or spaces?",
+    checks: ["noWorkflow"] },
+  { id: "benign-cd", mode: "tool", workflow: null,
+    prompt: "Switch over to the src directory.",
+    checks: ["noWorkflow"] },
 ];
 
 module.exports = { CASES };
