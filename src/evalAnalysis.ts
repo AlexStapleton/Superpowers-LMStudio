@@ -322,3 +322,54 @@ export function summarize(results: CaseResult[]): EvalSummary {
     byWorkflow,
   };
 }
+
+// --- Routing recall / precision over a labeled corpus (B3) ---------------------------------------
+export interface RoutingOutcome {
+  id: string;
+  /** Expected skill name, or null for a benign case that must route nowhere. */
+  expected: string | null;
+  /** What the router actually returned. */
+  got: string | null;
+}
+
+export interface RoutingReport {
+  recallHit: number;
+  recallTotal: number;
+  recallRate: number;
+  benignClean: number;
+  benignTotal: number;
+  benignRate: number;
+  misroutes: RoutingOutcome[];
+  falsePositives: RoutingOutcome[];
+  perSkill: Record<string, { hit: number; total: number }>;
+}
+
+/**
+ * Recall = of the labeled (non-benign) prompts, how many routed to the right skill.
+ * Precision proxy = of the benign prompts, how many correctly routed nowhere (no false positive).
+ * Pure: caller supplies the already-computed routes, so it works for keyword-only or keyword+semantic.
+ */
+export function summarizeRouting(outcomes: RoutingOutcome[]): RoutingReport {
+  const labeled = outcomes.filter(o => o.expected !== null);
+  const benign = outcomes.filter(o => o.expected === null);
+  const perSkill: Record<string, { hit: number; total: number }> = {};
+  for (const o of labeled) {
+    const key = o.expected as string;
+    perSkill[key] = perSkill[key] ?? { hit: 0, total: 0 };
+    perSkill[key].total++;
+    if (o.got === o.expected) perSkill[key].hit++;
+  }
+  const recallHit = labeled.filter(o => o.got === o.expected).length;
+  const benignClean = benign.filter(o => o.got === null).length;
+  return {
+    recallHit,
+    recallTotal: labeled.length,
+    recallRate: labeled.length ? recallHit / labeled.length : 0,
+    benignClean,
+    benignTotal: benign.length,
+    benignRate: benign.length ? benignClean / benign.length : 0,
+    misroutes: labeled.filter(o => o.got !== o.expected),
+    falsePositives: benign.filter(o => o.got !== null),
+    perSkill,
+  };
+}

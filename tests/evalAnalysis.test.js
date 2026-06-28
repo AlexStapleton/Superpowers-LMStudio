@@ -2,7 +2,26 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   checkAnnounce, checkToolInvoked, checkNoWorkflow, checkFirstStep, scoreCase, summarize,
+  summarizeRouting,
 } = require("../dist/evalAnalysis.js");
+
+test("summarizeRouting computes recall, benign precision, misroutes, false positives (B3)", () => {
+  const r = summarizeRouting([
+    { id: "a", expected: "tdd", got: "tdd" },          // hit
+    { id: "b", expected: "debugging", got: null },      // miss
+    { id: "c", expected: "research", got: "tdd" },      // misroute
+    { id: "d", expected: null, got: null },             // benign clean
+    { id: "e", expected: null, got: "debugging" },      // false positive
+  ]);
+  assert.equal(r.recallHit, 1);
+  assert.equal(r.recallTotal, 3);
+  assert.equal(r.benignClean, 1);
+  assert.equal(r.benignTotal, 2);
+  assert.deepEqual(r.falsePositives.map(o => o.id), ["e"]);
+  assert.deepEqual(r.misroutes.map(o => o.id).sort(), ["b", "c"]);
+  assert.equal(r.perSkill.tdd.hit, 1);
+  assert.equal(r.perSkill.debugging.total, 1);
+});
 
 test("checkAnnounce detects the announcement line", () => {
   assert.equal(checkAnnounce("Using Systematic Debugging — let's start", "Systematic Debugging").pass, true);
