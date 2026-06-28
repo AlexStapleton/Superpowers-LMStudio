@@ -30,6 +30,42 @@ async function probeEndpoint(baseUrl) {
   }
 }
 
+// When probeEndpoint returns null, say WHY: the server can be up but reject us (401 auth),
+// refuse the connection (not running), or be up with no model loaded. Pure mapping is testable.
+function classifyProbe({ status, networkError, modelCount }) {
+  if (networkError) {
+    return "not-running"; // connection refused / timeout / DNS
+  }
+  if (status === 401 || status === 403) {
+    return "auth"; // server is up but a token is required / wrong
+  }
+  if (status && status >= 200 && status < 300 && (modelCount ?? 0) === 0) {
+    return "no-model"; // reachable + authorized but nothing loaded
+  }
+  return "ok";
+}
+
+async function diagnoseEndpoint(baseUrl) {
+  let status = null, networkError = false, modelCount = 0;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    try {
+      const res = await fetch(`${baseUrl}/models`, { method: "GET", headers: authHeaders(), signal: ctrl.signal });
+      status = res.status;
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        modelCount = data?.data?.length ?? 0;
+      }
+    } finally {
+      clearTimeout(t);
+    }
+  } catch {
+    networkError = true;
+  }
+  return classifyProbe({ status, networkError, modelCount });
+}
+
 const USE_WORKFLOW_TOOL = {
   type: "function",
   function: {
@@ -206,4 +242,4 @@ async function probeEmbeddings(baseUrl, model) {
   }
 }
 
-module.exports = { probeEndpoint, runConversation, makeStubExecutor, chatOnce, embed, probeEmbeddings, USE_WORKFLOW_TOOL, STUB_TOOLS };
+module.exports = { probeEndpoint, classifyProbe, diagnoseEndpoint, runConversation, makeStubExecutor, chatOnce, embed, probeEmbeddings, USE_WORKFLOW_TOOL, STUB_TOOLS };

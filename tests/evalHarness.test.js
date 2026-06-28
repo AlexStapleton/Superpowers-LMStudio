@@ -1,7 +1,15 @@
 // Robustness R1: exercise the eval harness orchestration with a fake model (no live endpoint).
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { runConversation, makeStubExecutor } = require("../eval/client.js");
+const { runConversation, makeStubExecutor, classifyProbe } = require("../eval/client.js");
+
+test("classifyProbe distinguishes auth / no-model / not-running / ok", () => {
+  assert.equal(classifyProbe({ networkError: true }), "not-running");
+  assert.equal(classifyProbe({ status: 401 }), "auth");
+  assert.equal(classifyProbe({ status: 403 }), "auth");
+  assert.equal(classifyProbe({ status: 200, modelCount: 0 }), "no-model");
+  assert.equal(classifyProbe({ status: 200, modelCount: 3 }), "ok");
+});
 const { judgeAdherence } = require("../eval/judge.js");
 const { runCase, routerLoaded } = require("../eval/runner.js");
 

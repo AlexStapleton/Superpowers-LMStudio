@@ -9,7 +9,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { loadSkills, getSkillsDirCandidates } = require("../dist/skills.js");
 const { summarize } = require("../dist/evalAnalysis.js");
-const { probeEndpoint, probeEmbeddings } = require("./client.js");
+const { probeEndpoint, diagnoseEndpoint, probeEmbeddings } = require("./client.js");
 const { runCase, USE_WORKFLOW_TOOL, STUB_TOOLS } = require("./runner.js");
 const { CASES } = require("./cases.js");
 
@@ -28,10 +28,20 @@ const SEMANTIC_MARGIN = parseFloat(process.env.EVAL_SEMANTIC_MARGIN || "0.05");
 async function main() {
   const model = process.env.EVAL_MODEL || (await probeEndpoint(BASE_URL));
   if (!model) {
-    console.log(`No model reachable at ${BASE_URL}.`);
-    console.log("Start the LM Studio local server (Developer tab → Start Server) with a model loaded,");
-    console.log("then re-run `npm run eval`. Override the URL/model with EVAL_BASE_URL / EVAL_MODEL.");
-    process.exit(0);
+    const reason = await diagnoseEndpoint(BASE_URL);
+    if (reason === "auth") {
+      console.log(`The server at ${BASE_URL} is up but requires an API token (HTTP 401/403).`);
+      console.log("Set the LM Studio token, then re-run:  $env:EVAL_API_KEY = \"<your-token>\"  (PowerShell)");
+      console.log("Find/generate it in LM Studio → Developer tab → server settings, or disable 'Require API token'.");
+    } else if (reason === "no-model") {
+      console.log(`The server at ${BASE_URL} is reachable and authorized, but no model is loaded.`);
+      console.log("Load a chat model in LM Studio (Developer tab), then re-run `npm run eval`.");
+    } else {
+      console.log(`No server reachable at ${BASE_URL}.`);
+      console.log("Start the LM Studio local server (Developer tab → Start Server) with a model loaded,");
+      console.log("then re-run `npm run eval`. Override the URL/model with EVAL_BASE_URL / EVAL_MODEL.");
+    }
+    return; // let the process drain naturally (process.exit mid-fetch trips a libuv assert on Windows)
   }
   console.log(`Model: ${model} @ ${BASE_URL}\n`);
 
