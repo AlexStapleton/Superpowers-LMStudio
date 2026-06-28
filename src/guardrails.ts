@@ -41,3 +41,25 @@ export function evaluateTddGuardrail(opts: {
     `without a failing test first — write a failing test before creating source file '${fileName}'.`;
   return mode === "block" ? { block: true, warning } : { block: false, warning };
 }
+
+/**
+ * General workflow code-gate (DoD2): dispatches by active workflow.
+ *  - tdd: no production code before a test (see evaluateTddGuardrail).
+ *  - brainstorming: no source code at all — it's a DESIGN phase; design docs (.md) are fine.
+ */
+export function evaluateGuardrail(opts: {
+  active: string | null;
+  testSeen: boolean;
+  fileName: string;
+  mode: TddGuardrailMode;
+}): { block: boolean; warning: string | null } {
+  if (opts.mode === "off") return { block: false, warning: null };
+  if (opts.active === "tdd") return evaluateTddGuardrail(opts);
+  if (opts.active === "brainstorming" && isSourceCodeFile(opts.fileName)) {
+    const warning =
+      `Brainstorming is a DESIGN phase — do not write source code ('${opts.fileName}') before the design ` +
+      `is approved. Capture the design in a doc (e.g. docs/superpowers/specs/...md) and get sign-off first.`;
+    return opts.mode === "block" ? { block: true, warning } : { block: false, warning };
+  }
+  return { block: false, warning: null };
+}

@@ -1,6 +1,19 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { isTestFile, isSourceCodeFile, evaluateTddGuardrail } = require("../dist/guardrails.js");
+const { isTestFile, isSourceCodeFile, evaluateTddGuardrail, evaluateGuardrail } = require("../dist/guardrails.js");
+
+test("evaluateGuardrail dispatches: tdd test-first AND brainstorming no-source-code", () => {
+  // tdd path delegates to the test-first rule
+  assert.equal(evaluateGuardrail({ active: "tdd", testSeen: false, fileName: "app.py", mode: "block" }).block, true);
+  assert.equal(evaluateGuardrail({ active: "tdd", testSeen: true, fileName: "app.py", mode: "block" }).block, false);
+  // brainstorming blocks source code (design phase), allows docs
+  assert.equal(evaluateGuardrail({ active: "brainstorming", testSeen: false, fileName: "app.ts", mode: "block" }).block, true);
+  assert.equal(evaluateGuardrail({ active: "brainstorming", testSeen: false, fileName: "design.md", mode: "block" }).block, false);
+  // warn never blocks; off never fires; unrelated workflow no-op
+  assert.equal(evaluateGuardrail({ active: "brainstorming", testSeen: false, fileName: "app.ts", mode: "warn" }).block, false);
+  assert.match(evaluateGuardrail({ active: "brainstorming", testSeen: false, fileName: "app.ts", mode: "warn" }).warning, /design/i);
+  assert.equal(evaluateGuardrail({ active: "debugging", testSeen: false, fileName: "app.ts", mode: "block" }).block, false);
+});
 
 test("isTestFile recognizes common test naming", () => {
   for (const f of ["test_byte.py", "byte_test.go", "byte.test.ts", "foo.spec.js", "tests/foo.py", "src/__tests__/a.ts"]) {

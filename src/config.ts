@@ -204,8 +204,8 @@ export const pluginConfigSchematics = createConfigSchematics()
     subtitle: "Append each routing decision (matched workflow, router vs use_workflow tool) to ~/.beledarians-llm-toolbox/routing-log.jsonl. View a summary with `npm run routing-stats`.",
   }, false)
   .field("tddGuardrail", "string", {
-    displayName: "TDD test-first guardrail",
-    subtitle: "When the TDD workflow is active, controls saving source code before a test exists: 'off', 'warn' (save but warn), or 'block' (refuse and tell the model to write a failing test first).",
+    displayName: "Workflow code guardrail",
+    subtitle: "Code-enforces workflow gates: 'off', 'warn' (save but warn), or 'block' (refuse). When TDD is active, blocks source code before a test exists; when Brainstorming is active, blocks source code during the design phase (docs are fine).",
   }, "block")
   .field("enableSemanticRouter", "boolean", {
     displayName: "Semantic workflow routing",

@@ -1,6 +1,6 @@
 // Minimal OpenAI-compatible client for the behavioral eval (B1). No deps — Node 18+ fetch.
 const { buildWorkflowToolResult } = require("../dist/skills.js");
-const { isTestFile, evaluateTddGuardrail } = require("../dist/guardrails.js");
+const { isTestFile, evaluateGuardrail } = require("../dist/guardrails.js");
 
 // LM Studio servers can require a Bearer token. Set EVAL_API_KEY (or OPENAI_API_KEY) to send it.
 const API_KEY = process.env.EVAL_API_KEY || process.env.OPENAI_API_KEY || "";
@@ -102,7 +102,7 @@ function makeStubExecutor(skills, opts = {}) {
     if (name === "save_file") {
       const fileName = args.file_name || (Array.isArray(args.files) && args.files[0] && args.files[0].file_name) || "";
       if (isTestFile(fileName)) testSeen = true;
-      const g = evaluateTddGuardrail({ active: activeWorkflow, testSeen, fileName, mode });
+      const g = evaluateGuardrail({ active: activeWorkflow, testSeen, fileName, mode });
       if (g.block) return JSON.stringify({ blocked: true, error: g.warning });
       if (fileName) sandbox[fileName] = args.content || "";
       return JSON.stringify(g.warning ? { ok: true, warning: g.warning } : { ok: true });

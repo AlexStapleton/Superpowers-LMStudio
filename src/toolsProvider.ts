@@ -15,7 +15,7 @@ import { validateToolCall } from "./toolCallValidator";
 import { backgroundCommands, generateId, BackgroundCommand } from "./backgroundCommands";
 import { loadSkillsCached, getSkillsDirCandidates, buildWorkflowToolResult } from "./skills";
 import { appendRoutingEvent } from "./routingLog";
-import { isTestFile, evaluateTddGuardrail, type TddGuardrailMode } from "./guardrails";
+import { isTestFile, evaluateGuardrail, type TddGuardrailMode } from "./guardrails";
 
 import type { Browser, Page } from "puppeteer";
 
@@ -782,7 +782,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       const guardrailMode = (pluginConfig.get("tddGuardrail") as TddGuardrailMode) || "warn";
       let tddWarning: string | null = null;
       for (const f of filesToSave) {
-        const g = evaluateTddGuardrail({ active: activeWorkflow, testSeen: tddTestSeen, fileName: f.file_name, mode: guardrailMode });
+        const g = evaluateGuardrail({ active: activeWorkflow, testSeen: tddTestSeen, fileName: f.file_name, mode: guardrailMode });
         if (g.block) {
           return {
             error: g.warning,
