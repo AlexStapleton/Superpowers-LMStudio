@@ -143,6 +143,18 @@ export function renderDispatcherTable(skills: Skill[]): string {
   ].join("\n");
 }
 
+/**
+ * Compact dispatcher (E1): one bullet per skill, in precedence order, no table chrome.
+ * Cheaper per turn than the markdown table and less prone to small-model overthinking,
+ * while still naming each workflow + what it does so the model can self-route via use_workflow.
+ */
+export function renderDispatcherCompact(skills: Skill[]): string {
+  return [...skills]
+    .sort(byPrecedence)
+    .map(s => `- \`${s.name}\` — ${s.description}`)
+    .join("\n");
+}
+
 export function buildWorkflowToolResult(skill: Skill): { announce: string; instructions: string } {
   return {
     announce: `Before doing anything else (including any tool call), output the line: "Using ${skill.announce} —". Then proceed.`,

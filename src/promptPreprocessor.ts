@@ -13,7 +13,7 @@ import { pluginConfigSchematics } from "./config";
 import { TOOLS_DOCUMENTATION, TOOLS_DOCUMENTATION_LITE } from "./toolsDocumentation";
 import { getPersistedState, savePersistedState } from "./stateManager";
 import { getDict } from "./locales/i18n";
-import { loadSkillsCached, getSkillsDirCandidates, renderDispatcherTable, matchTriggers, type Skill } from "./skills";
+import { loadSkillsCached, getSkillsDirCandidates, renderDispatcherCompact, matchTriggers, type Skill } from "./skills";
 import { appendRoutingEvent } from "./routingLog";
 import { semanticMatch, buildEmbeddingText, QUERY_PREFIX, DOC_PREFIX, type SkillEmbedding } from "./semanticRouter";
 
@@ -140,17 +140,9 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
   const skillCandidates = getSkillsDirCandidates(dirname(__dirname), state.currentWorkingDirectory);
   const skills = await loadSkillsCached(skillCandidates);
   if (skills.length > 0) {
-    const dispatcher =
-      "[Workflow routing — this is inline guidance, NOT a task. The list is right here; do "
-      + "NOT search files or directories for it.] If the user's request matches one of the "
-      + "workflows listed below, FIRST call the `use_workflow` tool with that workflow name and "
-      + "follow what it returns, opening your reply with \"Using <workflow> —\". If nothing "
-      + "clearly matches (simple commands like cd, questions, small edits), ignore this entirely "
-      + "and just respond normally.\n\n"
-      + renderDispatcherTable(skills) + "\n\n";
-    currentContent = dispatcher + currentContent;
-
     // --- Code-side router backstop: keyword + semantic fallback (C1); observability A1/A2 ---
+    // Decide routing FIRST so the dispatcher form can adapt (E1): when we auto-load a workflow body,
+    // the full table is redundant noise that invites small-model overthinking.
     const routerEnabled = pluginConfig.get("enableWorkflowRouter");
     const keywordMatch = matchTriggers(skills, userPrompt);
     let routedName: string | null = keywordMatch;
@@ -164,12 +156,14 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
     }
 
     let routerAction: "injected" | "deduped" | "disabled" | "no-match";
+    let bodyInjected = false;
     if (!routerEnabled) {
       routerAction = "disabled";
     } else if (routedName && routedName !== state.lastInjectedWorkflow) {
       const skill = skills.find(s => s.name === routedName);
       if (skill) {
         currentContent = `[Workflow auto-loaded — follow this procedure now]\n${skill.body}\n\n` + currentContent;
+        bodyInjected = true;
       }
       state.lastInjectedWorkflow = routedName;
       await savePersistedState(state);
@@ -183,6 +177,22 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
         await savePersistedState(state);
       }
     }
+
+    // --- Workflow Dispatcher (Every Turn) ---
+    // When a body was auto-loaded, a one-liner suffices — the procedure is already in context, and the
+    // full table here only invites second-guessing. Otherwise inject the compact list so the model can
+    // still self-route via use_workflow. (Fixes the prior "dangling pointer" + cuts per-turn tokens.)
+    const dispatcher = bodyInjected
+      ? "[Workflow routing — a matching workflow procedure has been loaded above; follow it. Do NOT search files for it.]\n\n"
+      : "[Workflow routing — this is inline guidance, NOT a task. The list is right here; do "
+        + "NOT search files or directories for it.] If the user's request matches one of the "
+        + "workflows below, FIRST call the `use_workflow` tool with that workflow name and "
+        + "follow what it returns, opening your reply with \"Using <workflow> —\". If nothing "
+        + "clearly matches (simple commands like cd, questions, small edits), ignore this entirely "
+        + "and just respond normally.\n\n"
+        + renderDispatcherCompact(skills) + "\n\n";
+    currentContent = dispatcher + currentContent;
+
     await appendRoutingEvent(pluginConfig.get("enableRoutingLog"), {
       kind: "router",
       matched: routedName,

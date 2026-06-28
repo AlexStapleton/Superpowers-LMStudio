@@ -82,6 +82,20 @@ test("renderDispatcherTable lists every skill with name and description", () => 
   assert.match(table, /research/);
 });
 
+const { renderDispatcherCompact } = require("../dist/skills.js");
+
+test("renderDispatcherCompact lists each skill as a bullet, precedence-ordered, no table chrome", () => {
+  const out = renderDispatcherCompact([
+    { name: "research", description: "look it up", announce: "R", triggers: [], priority: 0 },
+    { name: "verification", description: "verify first", announce: "V", triggers: [], priority: 20 },
+  ]);
+  assert.doesNotMatch(out, /\|/); // no markdown table pipes
+  assert.match(out, /- `verification` — verify first/);
+  assert.match(out, /- `research` — look it up/);
+  // higher priority (verification) appears before lower (research)
+  assert.ok(out.indexOf("verification") < out.indexOf("research"));
+});
+
 const { buildWorkflowToolResult, decideRouterInjection } = require("../dist/skills.js");
 
 test("buildWorkflowToolResult returns announce instruction and body", () => {

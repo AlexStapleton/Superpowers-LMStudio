@@ -1,6 +1,6 @@
 // Per-case orchestration, extracted from run-eval.js so it is unit-testable (R4).
 // runCase runs N samples, judges adherence, scores, aggregates, and excludes infra-errored samples.
-const { renderDispatcherTable, matchTriggers } = require("../dist/skills.js");
+const { renderDispatcherCompact, matchTriggers } = require("../dist/skills.js");
 const { scoreCase, aggregateSamples } = require("../dist/evalAnalysis.js");
 const { semanticMatch, buildEmbeddingText, QUERY_PREFIX, DOC_PREFIX } = require("../dist/semanticRouter.js");
 const { runConversation, makeStubExecutor, embed, USE_WORKFLOW_TOOL, STUB_TOOLS } = require("./client.js");
@@ -17,12 +17,14 @@ const DISPATCH_PREAMBLE =
 // injectWorkflowName: the workflow the (simulated) router pre-injects, or null. Mirrors the real
 // plugin, where the code router injects the procedure when the prompt matches a trigger.
 function buildSystem(skills, c, injectWorkflowName) {
-  let sys = DISPATCH_PREAMBLE + "\n\n" + renderDispatcherTable(skills);
-  if (injectWorkflowName) {
-    const skill = skills.find(s => s.name === injectWorkflowName);
-    if (skill) sys += "\n\n[Workflow auto-loaded — follow this procedure now]\n" + skill.body;
+  // Mirror plugin E1: when a body is auto-loaded, drop the dispatcher table (one-liner only);
+  // otherwise show the compact list so the model can self-route via use_workflow.
+  const skill = injectWorkflowName ? skills.find(s => s.name === injectWorkflowName) : null;
+  if (skill) {
+    return "[Workflow routing — a matching workflow procedure has been loaded below; follow it. Do NOT search files for it.]"
+      + "\n\n[Workflow auto-loaded — follow this procedure now]\n" + skill.body;
   }
-  return sys;
+  return DISPATCH_PREAMBLE + "\n\n" + renderDispatcherCompact(skills);
 }
 
 // What the system loads up front, mirroring the real plugin's hybrid router:
