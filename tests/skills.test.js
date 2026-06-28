@@ -184,6 +184,7 @@ test("decideWorkflowInjection E5: a different workflow matches -> immediate swit
 test("decideWorkflowInjection E6: re-matching the same workflow resets the no-match streak", () => {
   const s = { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 1, noMatchStreak: 2 };
   const d = decideWorkflowInjection("tdd", s, 99, 3);
+  assert.equal(d.action, "deduped"); // re-match takes the dedup path, not a fresh inject
   assert.equal(d.nextState.noMatchStreak, 0);
 });
 
