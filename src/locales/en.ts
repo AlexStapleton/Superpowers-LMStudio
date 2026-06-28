@@ -110,7 +110,7 @@ export const en: LocaleDict = {
     useMainModelForSubAgent: {
       displayName: "Use Main Model as Sub-Agent",
       subtitle:
-        "If enabled, the sub-agent loop will use your main LM Studio server (localhost:1234). Ignores 'Endpoint' setting.",
+        "Recommended ON (default). The sub-agent reuses your already-loaded main model (localhost:1234), so only ONE model stays in memory. Turn OFF only if you have a separate endpoint or enough VRAM for a second model — otherwise a separate sub-agent model spills into system RAM and can crash. Ignores the 'Endpoint' setting when on.",
     },
     secondaryAgentEndpoint: {
       displayName: "Secondary Agent Endpoint",

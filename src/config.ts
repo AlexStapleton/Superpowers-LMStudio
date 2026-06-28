@@ -131,7 +131,7 @@ export const pluginConfigSchematics = createConfigSchematics()
   .field("useMainModelForSubAgent", "boolean", {
     displayName: c.useMainModelForSubAgent.displayName,
     subtitle: c.useMainModelForSubAgent.subtitle,
-  }, false)
+  }, true)
   .field("secondaryAgentEndpoint", "string", {
     displayName: c.secondaryAgentEndpoint.displayName,
     subtitle: c.secondaryAgentEndpoint.subtitle,
