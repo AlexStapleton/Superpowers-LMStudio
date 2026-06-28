@@ -11,10 +11,15 @@ triggers:
   - "\\bcrash(es|ing|ed)?\\b"
   - "throw(s|ing)? (an )?error"
   - "doesn'?t work"
+  - "\\bbroke(n)?\\b"
+  - "\\bregression\\b"
+  - "stack ?trace"
 examples:
   - "there is a bug in the login flow"
   - "the tests are failing"
   - "this function throws an error"
+  - "the build is broken"
+  - "here's the stack trace"
 ---
 
 Before doing anything else — including any tool call — output the line: "Using Systematic Debugging —". Then proceed.

@@ -7,6 +7,7 @@ triggers:
   - "\\bimplement\\b"
   - "add (a |the )?(feature|function|method|endpoint|test)"
   - "write (the )?code"
+  - "write (a |an |the )?(function|method|class|endpoint|component|feature)"
   - "build (a|the|me)"
   - "create (a|the) (function|class|component|module)"
   - "fix(ing)? (the )?(feature|function)"
@@ -14,6 +15,7 @@ examples:
   - "implement a CSV parser"
   - "build a login form"
   - "add a feature flag"
+  - "write a function to parse dates"
 ---
 
 Before doing anything else — including any tool call — output the line: "Using Test-Driven Development —". Then proceed.

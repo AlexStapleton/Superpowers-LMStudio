@@ -9,10 +9,14 @@ triggers:
   - "find (out |information )"
   - "what'?s the latest"
   - "latest (news|version|release)"
+  - "look into"
+  - "dig into"
+  - "\\bgoogle\\b"
 examples:
   - "research the latest react features"
   - "look up the current node LTS version"
   - "search the web for vite plugins"
+  - "look into the best way to do X"
 ---
 
 Before doing anything else — including any tool call — output the line: "Using Research —". Then proceed.
