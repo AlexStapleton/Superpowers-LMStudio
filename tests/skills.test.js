@@ -147,6 +147,40 @@ test("loadSkills returns [] for a missing dir (graceful)", async () => {
   assert.deepEqual(skills, []);
 });
 
+const { loadSkillsCached, skillsSignature } = require("../dist/skills.js");
+
+test("loadSkillsCached re-parses when a skill file changes mtime (G2)", async () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "skills-cache-"));
+  const file = path.join(dir, "x.md");
+  const md = (desc) =>
+    `---\nname: x\ndescription: ${desc}\nannounce: X\ntriggers:\n  - "x"\nexamples:\n  - "x"\n---\nbody`;
+  fs.writeFileSync(file, md("first"));
+  const a = await loadSkillsCached([dir]);
+  assert.equal(a[0].description, "first");
+
+  // Rewrite with a new mtime in the future so the signature changes deterministically.
+  fs.writeFileSync(file, md("second"));
+  const future = new Date(Date.now() + 5000);
+  fs.utimesSync(file, future, future);
+  const b = await loadSkillsCached([dir]);
+  assert.equal(b[0].description, "second", "cache should bust on mtime change");
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("skillsSignature is empty for a dir with no skills, stable otherwise", async () => {
+  assert.equal(await skillsSignature(["/nonexistent/dir"]), "");
+  const path = require("node:path");
+  const real = [path.join(__dirname, "..", "skills")];
+  const s1 = await skillsSignature(real);
+  const s2 = await skillsSignature(real);
+  assert.ok(s1.length > 0);
+  assert.equal(s1, s2);
+});
+
 const { validateSkills } = require("../dist/skills.js");
 
 test("validateSkills flags missing fields, bad regex, dup names, no examples", () => {

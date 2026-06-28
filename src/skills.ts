@@ -1,4 +1,4 @@
-import { readdir, readFile } from "fs/promises";
+import { readdir, readFile, stat } from "fs/promises";
 import { join } from "path";
 
 export interface Skill {
@@ -204,9 +204,34 @@ export async function loadSkills(candidateDirs: string[]): Promise<Skill[]> {
   return [];
 }
 
+/**
+ * Lightweight fingerprint of the active skills dir: chosen dir + each .md file's mtime (G2).
+ * Cheap (readdir + stat, no file contents) so it can run every turn; when it changes we re-parse.
+ */
+export async function skillsSignature(candidateDirs: string[]): Promise<string> {
+  for (const dir of candidateDirs) {
+    try {
+      const entries = await readdir(dir);
+      const files = entries.filter(f => f.endsWith(".md")).sort();
+      if (files.length === 0) continue;
+      const parts = await Promise.all(
+        files.map(async f => `${f}:${(await stat(join(dir, f))).mtimeMs}`)
+      );
+      return `${dir}|${parts.join(",")}`;
+    } catch {
+      // Dir missing — try next candidate.
+    }
+  }
+  return "";
+}
+
 let cached: Skill[] | null = null;
+let cachedSignature: string | null = null;
 export async function loadSkillsCached(candidateDirs: string[]): Promise<Skill[]> {
-  if (cached) return cached;
+  // Cache-bust when any skill file's mtime changes, so edits don't require a full plugin restart (G2).
+  const sig = await skillsSignature(candidateDirs);
+  if (cached && sig === cachedSignature) return cached;
   cached = await loadSkills(candidateDirs);
+  cachedSignature = sig;
   return cached;
 }
