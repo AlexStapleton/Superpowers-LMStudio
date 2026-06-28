@@ -15,6 +15,8 @@ export interface PluginState {
   lastInjectedWorkflow: string | null;
   /** Turns since the active workflow body was last injected — drives periodic re-injection (C4). */
   turnsSinceWorkflowInject: number;
+  /** Consecutive turns the active workflow has not re-matched — drives sticky expiry (skills.ts). */
+  workflowNoMatchStreak: number;
 }
 
 function resolveWorkspaceDirectory(configuredWorkspacePath?: string): string {
@@ -42,6 +44,7 @@ export async function getPersistedState(configuredWorkspacePath?: string): Promi
       uiLanguageOverride: state.uiLanguageOverride ?? "auto",
       lastInjectedWorkflow: state.lastInjectedWorkflow ?? null,
       turnsSinceWorkflowInject: state.turnsSinceWorkflowInject ?? 0,
+      workflowNoMatchStreak: state.workflowNoMatchStreak ?? 0,
     };
   } catch (error) {
     return {
@@ -52,6 +55,7 @@ export async function getPersistedState(configuredWorkspacePath?: string): Promi
       uiLanguageOverride: "auto",
       lastInjectedWorkflow: null,
       turnsSinceWorkflowInject: 0,
+      workflowNoMatchStreak: 0,
     };
   }
 }
