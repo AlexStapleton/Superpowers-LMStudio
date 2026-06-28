@@ -190,7 +190,7 @@ export function buildJudgePrompt(procedure: string, prompt: string, traj: Trajec
   ].join("\n");
 }
 
-export function parseJudgeVerdict(text: string): { pass: boolean; reason: string } {
+export function parseJudgeVerdict(text: string): { pass: boolean; reason: string; error?: boolean } {
   const match = text.match(/\{[^{}]*"follows"[\s\S]*?\}/);
   if (match) {
     try {
@@ -200,16 +200,25 @@ export function parseJudgeVerdict(text: string): { pass: boolean; reason: string
       /* fall through */
     }
   }
-  return { pass: false, reason: "unparseable judge response" };
+  // A judge that emits non-JSON is a JUDGE failure, not a "did not follow" verdict — flag it as an
+  // error so the runner EXCLUDES it from the adherence rate (weak judge models, e.g. a 12B judging a
+  // 12B, do this often; counting it as a fail silently deflates adherence).
+  return { pass: false, error: true, reason: "unparseable judge response" };
 }
 
 // --- Judge majority vote (robustness) ---
 
-export function majorityVerdict(verdicts: { pass: boolean; reason?: string }[]): { pass: boolean; reason: string } {
-  if (verdicts.length === 0) return { pass: false, reason: "no verdicts" };
-  const passes = verdicts.filter(v => v.pass).length;
-  const pass = passes > verdicts.length / 2; // strict majority; tie fails closed
-  const rep = verdicts.find(v => v.pass === pass) ?? verdicts[0];
+export function majorityVerdict(
+  verdicts: { pass: boolean; reason?: string; error?: boolean }[],
+): { pass: boolean; reason: string; error?: boolean } {
+  if (verdicts.length === 0) return { pass: false, error: true, reason: "no verdicts" };
+  // Errored/unparseable verdicts don't get a vote. If every verdict errored, the whole judgment is an
+  // error (excluded from the rate) rather than a fail.
+  const usable = verdicts.filter(v => !v.error);
+  if (usable.length === 0) return { pass: false, error: true, reason: verdicts[0].reason ?? "all judge verdicts errored" };
+  const passes = usable.filter(v => v.pass).length;
+  const pass = passes > usable.length / 2; // strict majority; tie fails closed
+  const rep = usable.find(v => v.pass === pass) ?? usable[0];
   return { pass, reason: rep.reason ?? "" };
 }
 

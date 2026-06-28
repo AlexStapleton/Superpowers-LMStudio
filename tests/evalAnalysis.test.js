@@ -119,6 +119,9 @@ test("parseJudgeVerdict parses clean JSON, fenced JSON, and rejects garbage", ()
   assert.equal(fenced.pass, false);
   assert.match(fenced.reason, /fix/);
   assert.equal(parseJudgeVerdict("no json here").pass, false);
+  // unparseable is a JUDGE error (excluded from adherence), not a genuine "did not follow"
+  assert.equal(parseJudgeVerdict("no json here").error, true);
+  assert.equal(parseJudgeVerdict('{"follows": true, "reason": "ok"}').error, undefined);
 });
 
 const { majorityVerdict, checkRegressions, calibrationReport } = require("../dist/evalAnalysis.js");
@@ -156,6 +159,10 @@ test("majorityVerdict takes the strict majority and fails closed on ties", () =>
   assert.equal(majorityVerdict([{ pass: true }, { pass: false }]).pass, false); // tie -> fail
   assert.equal(majorityVerdict([]).pass, false);
   assert.match(majorityVerdict([{ pass: true, reason: "good" }]).reason, /good/);
+  // errored verdicts don't vote; majority of the usable ones wins
+  assert.equal(majorityVerdict([{ pass: true }, { pass: false, error: true }, { pass: false, error: true }]).pass, true);
+  // all errored -> the whole judgment is an error (excluded), not a fail
+  assert.equal(majorityVerdict([{ pass: false, error: true }, { pass: false, error: true }]).error, true);
 });
 
 test("aggregateSamples computes per-check and hardPass rates", () => {
