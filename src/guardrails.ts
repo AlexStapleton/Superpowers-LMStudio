@@ -26,6 +26,16 @@ export function isSourceCodeFile(fileName: string): boolean {
 
 export type TddGuardrailMode = "off" | "warn" | "block";
 
+/**
+ * Which workflow is active for guardrail purposes. The code ROUTER auto-loads a workflow every turn
+ * (persisted as `lastInjectedWorkflow`) — this is the dominant path, because a 12B rarely self-invokes
+ * `use_workflow`. So the router's current injection must win; an explicit `use_workflow` call is only
+ * the fallback. Without this the gate was blind to the router path and almost never fired in practice.
+ */
+export function resolveActiveWorkflow(routerInjected: string | null, toolInvoked: string | null): string | null {
+  return routerInjected ?? toolInvoked;
+}
+
 export function evaluateTddGuardrail(opts: {
   active: string | null;
   testSeen: boolean;

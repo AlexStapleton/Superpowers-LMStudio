@@ -1,6 +1,23 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { isTestFile, isSourceCodeFile, evaluateTddGuardrail, evaluateGuardrail } = require("../dist/guardrails.js");
+const { isTestFile, isSourceCodeFile, evaluateTddGuardrail, evaluateGuardrail, resolveActiveWorkflow } = require("../dist/guardrails.js");
+
+test("resolveActiveWorkflow: router injection wins; tool invoke is the fallback (gate connects to router path)", () => {
+  // The dominant path: router auto-loaded tdd, model never called use_workflow → gate must still fire.
+  assert.equal(resolveActiveWorkflow("tdd", null), "tdd");
+  // Explicit invoke with no router match → use the tool's choice.
+  assert.equal(resolveActiveWorkflow(null, "tdd"), "tdd");
+  // Conversation moved on: router now says research, a STALE tool invoke said tdd → router wins.
+  assert.equal(resolveActiveWorkflow("research", "tdd"), "research");
+  assert.equal(resolveActiveWorkflow(null, null), null);
+});
+
+// Regression guard for the disconnect bug: a router-injected tdd must block source-before-test even
+// though no use_workflow tool call happened (activeWorkflow would be null).
+test("router-injected tdd blocks source-before-test with no use_workflow call", () => {
+  const active = resolveActiveWorkflow("tdd", null); // router path only
+  assert.equal(evaluateGuardrail({ active, testSeen: false, fileName: "src/app.ts", mode: "block" }).block, true);
+});
 
 test("evaluateGuardrail dispatches: tdd test-first AND brainstorming no-source-code", () => {
   // tdd path delegates to the test-first rule

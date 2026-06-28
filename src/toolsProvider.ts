@@ -15,7 +15,7 @@ import { validateToolCall } from "./toolCallValidator";
 import { backgroundCommands, generateId, BackgroundCommand } from "./backgroundCommands";
 import { loadSkillsCached, getSkillsDirCandidates, buildWorkflowToolResult } from "./skills";
 import { appendRoutingEvent } from "./routingLog";
-import { isTestFile, evaluateGuardrail, type TddGuardrailMode } from "./guardrails";
+import { isTestFile, evaluateGuardrail, resolveActiveWorkflow, type TddGuardrailMode } from "./guardrails";
 import { findSystemBrowserPath } from "./findBrowser";
 
 import type { Browser, Page } from "puppeteer";
@@ -133,8 +133,9 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
   const fullState = await getPersistedState(defaultWorkspacePath);
   let currentWorkingDirectory = fullState.currentWorkingDirectory;
 
-  // D1: TDD test-first guardrail state (per session). Set when use_workflow loads a workflow;
-  // tddTestSeen flips once a test file is written or a test command runs.
+  // D1: TDD test-first guardrail state (per session). `activeWorkflow` tracks an explicit use_workflow
+  // call; the dominant signal is the router's persisted `lastInjectedWorkflow`, resolved per save in
+  // save_file (resolveActiveWorkflow). tddTestSeen flips once a test file is written or a test runs.
   let activeWorkflow: string | null = null;
   let tddTestSeen = false;
 
@@ -784,9 +785,15 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       // D1: TDD test-first guardrail. Writing a test (or running tests) clears it.
       if (filesToSave.some(f => isTestFile(f.file_name))) tddTestSeen = true;
       const guardrailMode = (pluginConfig.get("tddGuardrail") as TddGuardrailMode) || "warn";
+      // The router auto-loads the workflow (persisted as lastInjectedWorkflow) far more often than the
+      // model self-invokes use_workflow — so resolve the active workflow from the router state first,
+      // otherwise the gate is blind to the dominant path and never fires.
+      let routerInjected: string | null = null;
+      try { routerInjected = (await getPersistedState(defaultWorkspacePath)).lastInjectedWorkflow; } catch { /* fall back to tool state */ }
+      const effectiveActive = resolveActiveWorkflow(routerInjected, activeWorkflow);
       let tddWarning: string | null = null;
       for (const f of filesToSave) {
-        const g = evaluateGuardrail({ active: activeWorkflow, testSeen: tddTestSeen, fileName: f.file_name, mode: guardrailMode });
+        const g = evaluateGuardrail({ active: effectiveActive, testSeen: tddTestSeen, fileName: f.file_name, mode: guardrailMode });
         if (g.block) {
           return {
             error: g.warning,
