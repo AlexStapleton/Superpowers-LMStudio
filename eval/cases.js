@@ -52,7 +52,8 @@ const CASES = [
 
   // --- more tool-mode cases (broader intent coverage; phrasings avoid the triggers) ---
   { id: "tdd-tool", mode: "tool", workflow: "tdd", announce: "Test-Driven Development",
-    prompt: "I want a rate limiter for the API client — go ahead and build it out for me.",
+    // Unambiguous "write this function" task (not "build me a system", which legitimately plans first).
+    prompt: "Write a function that validates whether a string is a well-formed email address.",
     checks: ["workflowLoaded", "toolInvoked", "announce"] },
   { id: "review-request-tool", mode: "tool", workflow: "requesting-code-review", announce: "Requesting Code Review",
     prompt: "Could you have someone look over my changes and tell me whether they're solid before I merge?",
