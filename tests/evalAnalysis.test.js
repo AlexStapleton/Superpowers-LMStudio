@@ -75,6 +75,19 @@ test("workflowLoaded passes via router match OR a use_workflow tool call (realis
   assert.equal(neither.checks[0].pass, false);
 });
 
+test("announce is code-guaranteed when the router auto-loads the workflow (plugin status block)", () => {
+  const c = { id: "x", prompt: "p", mode: "router", workflow: "tdd", announce: "Test-Driven Development", checks: ["announce"] };
+  // Router loaded the correct workflow → plugin surfaces "Using X —" via createStatus, even with empty text.
+  const loaded = scoreCase(c, { finalText: "", toolCalls: [] }, undefined, { routerMatched: "tdd" });
+  assert.equal(loaded.checks[0].pass, true);
+  assert.match(loaded.checks[0].detail, /code-surfaced/);
+  // Model must self-route (router did not load it) → announce still depends on the model's text.
+  const selfRoute = scoreCase(c, { finalText: "", toolCalls: [] }, undefined, { routerMatched: null });
+  assert.equal(selfRoute.checks[0].pass, false);
+  const selfRouteOk = scoreCase(c, { finalText: "Using Test-Driven Development — ok", toolCalls: [] }, undefined, { routerMatched: null });
+  assert.equal(selfRouteOk.checks[0].pass, true);
+});
+
 test("summarize reports workflowLoadedRate", () => {
   const results = [
     { id: "1", workflow: "debugging", mode: "tool", hardPass: true, checks: [{ name: "workflowLoaded", pass: true }] },

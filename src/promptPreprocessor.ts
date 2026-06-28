@@ -175,6 +175,13 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
         if (skill) {
           currentContent = `[Workflow auto-loaded — follow this procedure now]\n${skill.body}\n\n` + currentContent;
           bodyInjected = true;
+          // Surface the announcement deterministically rather than relying on the small model to narrate
+          // it (a 12B frequently acts silently). The user sees which workflow is active regardless.
+          try {
+            ctl.createStatus({ status: "done", text: `Using ${skill.announce} —` });
+          } catch (e) {
+            ctl.debug("Failed to surface workflow announce status.", e);
+          }
         }
       }
       if (
