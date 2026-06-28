@@ -119,6 +119,54 @@ const CASES = [
   { id: "benign-cd", mode: "tool", workflow: null,
     prompt: "Switch over to the src directory.",
     checks: ["noWorkflow"] },
+
+  // ===================================================================================
+  // Corpus expansion (toward DoD3) — added for a broader eval pass. Distinct phrasings.
+  // ===================================================================================
+
+  // --- new tool-mode routing cases (more phrasings; fills code-conventions coverage) ---
+  { id: "code-conventions-tool", mode: "tool", workflow: "code-conventions", announce: "Code Conventions Check",
+    prompt: "Before merging, make this new module follow the existing code conventions and patterns.",
+    checks: ["workflowLoaded", "toolInvoked", "announce"] },
+  { id: "dbg-tool-2", mode: "tool", workflow: "debugging", announce: "Systematic Debugging",
+    prompt: "The checkout total comes out wrong whenever a coupon is applied — figure out why.",
+    checks: ["workflowLoaded", "toolInvoked", "announce"] },
+  { id: "research-tool-2", mode: "tool", workflow: "research", announce: "Research",
+    prompt: "What's the current best practice for rate-limiting a public REST API?",
+    checks: ["workflowLoaded", "toolInvoked", "announce"] },
+  { id: "review-request-tool-2", mode: "tool", workflow: "requesting-code-review", announce: "Requesting Code Review",
+    prompt: "Can you run a code review over my diff before I push it?",
+    checks: ["workflowLoaded", "toolInvoked", "announce"] },
+
+  // --- new router-mode adherence cases (the "evidence-before-conclusion" hard half) ---
+  { id: "tdd-router-2", mode: "router", workflow: "tdd", announce: "Test-Driven Development",
+    prompt: "I need a debounce utility for the search box.",
+    checks: ["announce", "adherence"] },
+  { id: "dbg-router-2", mode: "router", workflow: "debugging", announce: "Systematic Debugging",
+    prompt: "After bumping the ORM to v3, about half the integration tests throw connection errors.",
+    checks: ["announce", "adherence"] },
+  { id: "research-router-2", mode: "router", workflow: "research", announce: "Research",
+    prompt: "Figure out whether Bun is production-ready enough to replace Node for our API.",
+    checks: ["announce", "adherence"] },
+  { id: "brainstorm-router-2", mode: "router", workflow: "brainstorming", announce: "Brainstorming",
+    prompt: "I'm toying with adding real-time collaboration to the editor — where do we even start?",
+    checks: ["announce", "adherence"] },
+  { id: "verify-router-2", mode: "router", workflow: "verification", announce: "Verification Before Completion",
+    prompt: "Before I close out the ticket, double-check the fix actually holds end to end.",
+    checks: ["announce", "adherence"] },
+
+  // --- new precedence case: a bug + an implement verb → debugging (gate) must win over tdd ---
+  { id: "prec-debug-over-tdd", mode: "tool", workflow: "debugging", announce: "Systematic Debugging",
+    prompt: "There's a bug — implement a fix for the null pointer crash.",
+    checks: ["workflowLoaded"] },
+
+  // --- new benign negatives ---
+  { id: "benign-weather", mode: "tool", workflow: null,
+    prompt: "Any idea what the weather's like today?",
+    checks: ["noWorkflow"] },
+  { id: "benign-unit", mode: "tool", workflow: null,
+    prompt: "How many ounces are in a pound?",
+    checks: ["noWorkflow"] },
 ];
 
 module.exports = { CASES };
