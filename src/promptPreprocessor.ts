@@ -31,7 +31,9 @@ async function semanticRoute(
 ): Promise<string | null> {
   try {
     const model = await ctl.client.embedding.model(modelId, { signal: ctl.abortSignal });
-    const key = skills.map(s => s.name).join(",");
+    // Key on the actual embed text + model, not just names — so a hot-reloaded description/examples
+    // (G2) or a changed embedding model busts the cache instead of serving stale vectors.
+    const key = [modelId, ...skills.map(s => s.name + " :: " + buildEmbeddingText(s))].join(" || ");
     if (!cachedSkillEmbeddings || cachedSkillEmbeddings.key !== key) {
       const embs = await model.embed(skills.map(s => DOC_PREFIX + buildEmbeddingText(s)));
       cachedSkillEmbeddings = { key, embeddings: skills.map((s, i) => ({ name: s.name, vector: embs[i].embedding })) };
