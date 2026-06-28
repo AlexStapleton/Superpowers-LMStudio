@@ -1408,6 +1408,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       const results: SearchResult[] = [];
       const errors: string[] = [];
       const logs: string[] = [];
+      let chromeUnavailable = false;
 
       const decodeHtmlEntities = (value: string) =>
         value
@@ -1612,7 +1613,6 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       } else {
         const chain: SearchProvider[] = ["duckduckgo-fetch", "duckduckgo-api", "duckduckgo-html", "google", "bing"];
         const browserProviders: SearchProvider[] = ["duckduckgo-html", "google", "bing"];
-        let chromeUnavailable = false;
 
         for (let i = 0; i < chain.length; i++) {
           const providerKey = chain[i];
@@ -1650,6 +1650,13 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       if (results.length === 0) {
         return {
           error: "All attempted search providers failed.",
+          ...(chromeUnavailable
+            ? {
+                hint:
+                  "No usable browser was found for the browser-based search providers. Install Google Chrome or Microsoft Edge (auto-detected), " +
+                  "or run `npx puppeteer browsers install chrome` in the plugin directory, then retry.",
+              }
+            : {}),
           attempts: errors,
           trace: logs,
         };
