@@ -223,6 +223,10 @@ export const pluginConfigSchematics = createConfigSchematics()
     displayName: "Workflow re-injection interval (turns)",
     subtitle: "On a long session the loaded workflow procedure scrolls out of context. Re-inject it after this many turns while the same workflow still matches. 0 = never re-inject. Default 4.",
   }, "4")
+  .field("workflowStickyTurns", "string", {
+    displayName: "Workflow stickiness (turns)",
+    subtitle: "Keep an auto-loaded workflow active for this many follow-up turns that don't re-match a trigger, so a multi-turn task keeps its procedure + code guardrail. 0 = drop it as soon as a turn doesn't match. Default 3.",
+  }, "3")
   .field("embeddingModelId", "string", {
     displayName: "Embedding model (semantic routing / RAG)",
     subtitle: "Model identifier used for semantic routing and local RAG. Set this to an embedding model you have loaded in LM Studio (e.g. 'text-embedding-nomic-embed-text-v2-moe'). If it can't load, semantic routing falls back to keyword-only.",

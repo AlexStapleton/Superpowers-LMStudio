@@ -148,37 +148,52 @@ export function renderDispatcherTable(skills: Skill[]): string {
  * Cheaper per turn than the markdown table and less prone to small-model overthinking,
  * while still naming each workflow + what it does so the model can self-route via use_workflow.
  */
-export type InjectionAction = "injected" | "reinjected" | "deduped" | "no-match";
+export type InjectionAction = "injected" | "reinjected" | "deduped" | "sticky" | "expired" | "no-match";
 export interface InjectionState {
   lastInjectedWorkflow: string | null;
   turnsSinceWorkflowInject: number;
+  noMatchStreak: number;
 }
 
 /**
- * Decide whether to (re)inject the matched workflow body (C4). Pure + testable.
- * - new match → inject (counter resets)
- * - same match, counter reached the interval → re-inject so the procedure doesn't scroll out of
- *   context on long sessions (counter resets)
- * - same match, below interval → dedup (counter++)
- * - no match → clear the active workflow
- * reinjectInterval <= 0 disables re-injection (old "inject once then suppress forever" behavior).
+ * Decide whether to (re)inject the matched workflow body, and keep the active workflow alive across
+ * follow-up turns that don't re-match (sticky), so multi-turn tasks don't lose the procedure or the
+ * code guardrail. Pure + testable.
+ *  - new/switched match → inject
+ *  - same match → dedup, or reinject every `reinjectInterval` turns
+ *  - no match but a workflow is active → stay `sticky`, until `stickyTurns` consecutive no-match turns → `expired`
+ *  - no match and nothing active → no-match
+ * `reinjectInterval <= 0` disables re-injection. `stickyTurns <= 0` disables stickiness (clear at once).
  */
 export function decideWorkflowInjection(
   routedName: string | null,
   state: InjectionState,
   reinjectInterval: number,
+  stickyTurns: number,
 ): { action: InjectionAction; nextState: InjectionState } {
-  if (!routedName) {
-    return { action: "no-match", nextState: { lastInjectedWorkflow: null, turnsSinceWorkflowInject: 0 } };
+  const prevStreak = state.noMatchStreak ?? 0;
+  // 1) A new (or switched) workflow matched → inject it now.
+  if (routedName && routedName !== state.lastInjectedWorkflow) {
+    return { action: "injected", nextState: { lastInjectedWorkflow: routedName, turnsSinceWorkflowInject: 0, noMatchStreak: 0 } };
   }
-  if (routedName !== state.lastInjectedWorkflow) {
-    return { action: "injected", nextState: { lastInjectedWorkflow: routedName, turnsSinceWorkflowInject: 0 } };
+  const active = routedName ?? state.lastInjectedWorkflow;
+  // 2) Nothing active and nothing matched.
+  if (!active) {
+    return { action: "no-match", nextState: { lastInjectedWorkflow: null, turnsSinceWorkflowInject: 0, noMatchStreak: 0 } };
   }
+  const matchedThisTurn = routedName === active;
+  const noMatchStreak = matchedThisTurn ? 0 : prevStreak + 1;
+  // 3) No match this turn but a workflow is active → expire after the sticky window (or at once if disabled).
+  if (!matchedThisTurn && (stickyTurns <= 0 || noMatchStreak >= stickyTurns)) {
+    return { action: "expired", nextState: { lastInjectedWorkflow: null, turnsSinceWorkflowInject: 0, noMatchStreak: 0 } };
+  }
+  // 4) Periodic re-injection so the procedure survives a long task (fires on sticky turns too).
   const turns = state.turnsSinceWorkflowInject + 1;
   if (reinjectInterval > 0 && turns >= reinjectInterval) {
-    return { action: "reinjected", nextState: { lastInjectedWorkflow: routedName, turnsSinceWorkflowInject: 0 } };
+    return { action: "reinjected", nextState: { lastInjectedWorkflow: active, turnsSinceWorkflowInject: 0, noMatchStreak } };
   }
-  return { action: "deduped", nextState: { lastInjectedWorkflow: routedName, turnsSinceWorkflowInject: turns } };
+  // 5) Carry forward without re-injecting.
+  return { action: matchedThisTurn ? "deduped" : "sticky", nextState: { lastInjectedWorkflow: active, turnsSinceWorkflowInject: turns, noMatchStreak } };
 }
 
 export function renderDispatcherCompact(skills: Skill[]): string {

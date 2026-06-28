@@ -164,14 +164,20 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
     } else {
       // Re-inject the active procedure every N turns so it doesn't scroll out of context (C4).
       const reinjectInterval = parseInt(pluginConfig.get("workflowReinjectInterval"), 10);
+      const stickyTurns = parseInt(pluginConfig.get("workflowStickyTurns"), 10);
       const decision = decideWorkflowInjection(
         routedName,
-        { lastInjectedWorkflow: state.lastInjectedWorkflow, turnsSinceWorkflowInject: state.turnsSinceWorkflowInject },
+        {
+          lastInjectedWorkflow: state.lastInjectedWorkflow,
+          turnsSinceWorkflowInject: state.turnsSinceWorkflowInject,
+          noMatchStreak: state.workflowNoMatchStreak,
+        },
         Number.isFinite(reinjectInterval) ? reinjectInterval : 4,
+        Number.isFinite(stickyTurns) ? stickyTurns : 3,
       );
       routerAction = decision.action;
       if (decision.action === "injected" || decision.action === "reinjected") {
-        const skill = routedName ? skills.find(s => s.name === routedName) : undefined;
+        const skill = skills.find(s => s.name === decision.nextState.lastInjectedWorkflow);
         if (skill) {
           currentContent = `[Workflow auto-loaded — follow this procedure now]\n${skill.body}\n\n` + currentContent;
           bodyInjected = true;
@@ -186,10 +192,12 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
       }
       if (
         decision.nextState.lastInjectedWorkflow !== state.lastInjectedWorkflow ||
-        decision.nextState.turnsSinceWorkflowInject !== state.turnsSinceWorkflowInject
+        decision.nextState.turnsSinceWorkflowInject !== state.turnsSinceWorkflowInject ||
+        decision.nextState.noMatchStreak !== state.workflowNoMatchStreak
       ) {
         state.lastInjectedWorkflow = decision.nextState.lastInjectedWorkflow;
         state.turnsSinceWorkflowInject = decision.nextState.turnsSinceWorkflowInject;
+        state.workflowNoMatchStreak = decision.nextState.noMatchStreak;
         await savePersistedState(state);
       }
     }
