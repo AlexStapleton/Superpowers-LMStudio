@@ -29,3 +29,5 @@ routing-log.jsonl
 # Behavioral eval output (B1) + regression baseline (R5) — machine/model specific
 eval/report.json
 eval/baseline.json
+# Local eval settings (API token, model ids) — per-machine; see eval/eval.local.env.example
+eval/eval.local.env

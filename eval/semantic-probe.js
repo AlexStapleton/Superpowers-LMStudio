@@ -3,6 +3,7 @@
 // the nomic prefixes applied — so we can see the real scores and pick a threshold (or learn the
 // embedding approach needs work). Fast: embeddings only, no chat/judge.
 const path = require("node:path");
+require("./localEnv.js").loadLocalEnv(path.join(__dirname, "eval.local.env"));
 const { loadSkills, getSkillsDirCandidates } = require("../dist/skills.js");
 const { cosineSimilarity, buildEmbeddingText, QUERY_PREFIX, DOC_PREFIX } = require("../dist/semanticRouter.js");
 const { embed, probeEmbeddings } = require("./client.js");

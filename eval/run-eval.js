@@ -7,6 +7,9 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+// Load gitignored local settings (token, model ids, judge model/votes) BEFORE requiring modules that
+// read process.env at load time (client.js API key, judge.js votes). Shell vars still win.
+const appliedLocalEnv = require("./localEnv.js").loadLocalEnv(path.join(__dirname, "eval.local.env"));
 const { loadSkills, getSkillsDirCandidates } = require("../dist/skills.js");
 const { summarize } = require("../dist/evalAnalysis.js");
 const { probeEndpoint, diagnoseEndpoint, probeEmbeddings } = require("./client.js");
@@ -26,6 +29,7 @@ const SEMANTIC_THRESHOLD = parseFloat(process.env.EVAL_SEMANTIC_THRESHOLD || "0.
 const SEMANTIC_MARGIN = parseFloat(process.env.EVAL_SEMANTIC_MARGIN || "0.05");
 
 async function main() {
+  if (appliedLocalEnv.length) console.log(`Loaded eval.local.env: ${appliedLocalEnv.join(", ")}\n`);
   const model = process.env.EVAL_MODEL || (await probeEndpoint(BASE_URL));
   if (!model) {
     const reason = await diagnoseEndpoint(BASE_URL);
