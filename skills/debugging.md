@@ -25,7 +25,7 @@ examples:
 Before doing anything else — including any tool call — output the line: "Using Systematic Debugging —". Then proceed.
 
 The Iron Law: **NO fixes without root cause investigation first.**
-- **Phase 1 — Reproduce FIRST (mandatory first action):** Your VERY FIRST tool call MUST run the failing command/tests (e.g. `run_test_command`) to capture the ACTUAL error output. Do NOT read or edit source files until you have seen the real error. Only after you have the error text: read it fully, confirm it reproduces consistently, and check recent changes.
+- **Phase 1 — Reproduce before you theorize:** Before proposing ANY cause or fix, you MUST run the failing command/tests (e.g. `run_test_command`) and see the ACTUAL error output — never theorize from reading source code alone. A quick orientation (listing files to find the test command) is fine, but reproducing the real error must come before any hypothesis. Then read the error fully, confirm it reproduces consistently, and check recent changes.
   - **Multi-component systems (CI → build → sign, API → service → DB):** Add diagnostic instrumentation at EACH component boundary BEFORE proposing fixes — log what data enters and exits each layer, run once to identify WHERE it breaks, then investigate that specific layer only.
 - **Phase 2 — Pattern:** Find working examples in the codebase. Identify exactly what is different.
 - **Phase 3 — Hypothesis:** State one specific theory ("X fails because Y"). Make the smallest possible change to test it. One variable at a time.
