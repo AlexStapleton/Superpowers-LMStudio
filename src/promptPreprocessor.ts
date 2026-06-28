@@ -27,9 +27,10 @@ async function semanticRoute(
   userPrompt: string,
   threshold: number,
   margin: number,
+  modelId: string,
 ): Promise<string | null> {
   try {
-    const model = await ctl.client.embedding.model("nomic-ai/nomic-embed-text-v1.5-GGUF", { signal: ctl.abortSignal });
+    const model = await ctl.client.embedding.model(modelId, { signal: ctl.abortSignal });
     const key = skills.map(s => s.name).join(",");
     if (!cachedSkillEmbeddings || cachedSkillEmbeddings.key !== key) {
       const embs = await model.embed(skills.map(s => DOC_PREFIX + buildEmbeddingText(s)));
@@ -157,7 +158,8 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
     if (!routedName && routerEnabled && pluginConfig.get("enableSemanticRouter")) {
       const threshold = parseFloat(pluginConfig.get("semanticRouterThreshold")) || 0.35;
       const margin = parseFloat(pluginConfig.get("semanticRouterMargin")) || 0.05;
-      const semName = await semanticRoute(ctl, skills, userPrompt, threshold, margin);
+      const embeddingModelId = pluginConfig.get("embeddingModelId") || "nomic-ai/nomic-embed-text-v1.5-GGUF";
+      const semName = await semanticRoute(ctl, skills, userPrompt, threshold, margin, embeddingModelId);
       if (semName) { routedName = semName; routedVia = "semantic"; }
     }
 
@@ -361,10 +363,10 @@ async function prepareRetrievalResultsContextInjection(
     status: "loading",
     text: rtRetrieve.statusLoadingEmbeddingModel,
   });
-  // Using the same model as rag-v1
-  const model = await ctl.client.embedding.model("nomic-ai/nomic-embed-text-v1.5-GGUF", {
-    signal: ctl.abortSignal,
-  });
+  const model = await ctl.client.embedding.model(
+    pluginConfig.get("embeddingModelId") || "nomic-ai/nomic-embed-text-v1.5-GGUF",
+    { signal: ctl.abortSignal },
+  );
   retrievingStatus.setState({
     status: "loading",
     text: rtRetrieve.statusRetrievingCitations,

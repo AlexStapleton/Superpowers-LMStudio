@@ -206,7 +206,7 @@ export const pluginConfigSchematics = createConfigSchematics()
   .field("tddGuardrail", "string", {
     displayName: "TDD test-first guardrail",
     subtitle: "When the TDD workflow is active, controls saving source code before a test exists: 'off', 'warn' (save but warn), or 'block' (refuse and tell the model to write a failing test first).",
-  }, "warn")
+  }, "block")
   .field("enableSemanticRouter", "boolean", {
     displayName: "Semantic workflow routing",
     subtitle: "When the keyword triggers miss, match the message to a workflow by meaning (embeddings) — catches naturally-phrased requests the keywords can't. Requires the embedding model.",
@@ -219,4 +219,8 @@ export const pluginConfigSchematics = createConfigSchematics()
     displayName: "Semantic routing confidence margin",
     subtitle: "The best-matching workflow must beat the runner-up by at least this much, or no route (avoids guessing between overlapping workflows). Default 0.05.",
   }, "0.05")
+  .field("embeddingModelId", "string", {
+    displayName: "Embedding model (semantic routing / RAG)",
+    subtitle: "Model identifier used for semantic routing and local RAG. Set this to an embedding model you have loaded in LM Studio (e.g. 'text-embedding-nomic-embed-text-v2-moe'). If it can't load, semantic routing falls back to keyword-only.",
+  }, "nomic-ai/nomic-embed-text-v1.5-GGUF")
   .build();
