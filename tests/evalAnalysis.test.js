@@ -5,8 +5,9 @@ const {
   summarizeRouting, checkDelegated,
 } = require("../dist/evalAnalysis.js");
 
-test("checkDelegated detects a consult_secondary_agent call (soft signal)", () => {
+test("checkDelegated detects either delegation tool (soft signal)", () => {
   assert.equal(checkDelegated([{ name: "consult_secondary_agent", args: { task: "x" } }]).pass, true);
+  assert.equal(checkDelegated([{ name: "dispatch_parallel_agents", args: { tasks: [{ task: "a" }, { task: "b" }] } }]).pass, true);
   assert.equal(checkDelegated([{ name: "read_file", args: {} }]).pass, false);
   assert.equal(checkDelegated([]).soft, true); // never gates hardPass
 });

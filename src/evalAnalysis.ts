@@ -70,8 +70,8 @@ export function checkToolInvoked(toolCalls: ToolCall[], workflow: string | null)
 // Did the agent delegate to a sub-agent (consult_secondary_agent)? Soft/informational signal for the
 // sub-agent orchestration workflows — the judge grades whether the delegation was done WELL.
 export function checkDelegated(toolCalls: ToolCall[]): CheckResult {
-  const pass = toolCalls.some(c => c.name === "consult_secondary_agent");
-  return { name: "delegated", pass, soft: true, detail: pass ? undefined : "no consult_secondary_agent call" };
+  const pass = toolCalls.some(c => c.name === "consult_secondary_agent" || c.name === "dispatch_parallel_agents");
+  return { name: "delegated", pass, soft: true, detail: pass ? undefined : "no consult_secondary_agent / dispatch_parallel_agents call" };
 }
 
 // Realistic mode: did the workflow load by EITHER path — the code router matching the prompt, or the

@@ -24,6 +24,14 @@ test("stub consult_secondary_agent: reviewer returns findings; implementer saves
   assert.ok(read.content && !read.error);
 });
 
+test("stub dispatch_parallel_agents: fans out N tasks, each produces a verifiable file", async () => {
+  const exec = makeStubExecutor([]);
+  const out = JSON.parse(await exec("dispatch_parallel_agents", { tasks: [{ task: "update doc A" }, { task: "update doc B" }, { task: "update doc C" }] }));
+  assert.equal(out.dispatched, 3);
+  const ls = JSON.parse(await exec("list_directory", {}));
+  assert.ok(["src/parallel_output_1.js", "src/parallel_output_2.js", "src/parallel_output_3.js"].every(f => ls.files.includes(f)));
+});
+
 const { judgeAdherence } = require("../eval/judge.js");
 const { runCase, routerLoaded } = require("../eval/runner.js");
 
