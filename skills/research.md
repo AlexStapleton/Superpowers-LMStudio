@@ -12,11 +12,16 @@ triggers:
   - "look into"
   - "dig into"
   - "\\bgoogle\\b"
+  - "recommended way (to|for|of)"
+  - "best practice"
+  - "currently recommended"
+  - "which .{0,30}(library|framework|package|tool|approach) (should|to|is best)"
 examples:
   - "research the latest react features"
   - "look up the current node LTS version"
   - "search the web for vite plugins"
   - "look into the best way to do X"
+  - "what's the recommended way to persist auth tokens in a desktop app"
 ---
 
 Before doing anything else — including any tool call — output the line: "Using Research —". Then proceed.
