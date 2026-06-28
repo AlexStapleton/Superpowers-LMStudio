@@ -2,6 +2,7 @@
 name: writing-plans
 description: Use when you have a spec or requirements for a multi-step task, before touching code
 announce: Writing Plans
+priority: 10
 triggers:
   - "write (an?|the) (implementation )?plan"
   - "create (an?|the) (implementation )?plan"

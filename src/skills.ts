@@ -8,6 +8,12 @@ export interface Skill {
   triggers: string[];
   /** Example user prompts that should route to this skill — asserted by the routing eval. */
   examples: string[];
+  /**
+   * Routing precedence when multiple skills' triggers match the same prompt (C2). Higher wins.
+   * Process/discipline skills (verification, brainstorming, debugging) outrank implementation skills
+   * so a gate fires before the work it gates. Default 0 — replaces the old accidental alphabetical order.
+   */
+  priority: number;
   body: string;
 }
 export interface SkillMeta { name: string; description: string; announce: string; }
@@ -54,8 +60,15 @@ export function parseSkillMarkdown(markdown: string): Skill {
     announce: scalars.announce,
     triggers: lists["triggers"] ?? [],
     examples: lists["examples"] ?? [],
+    priority: parsePriority(scalars.priority),
     body: body.trim(),
   };
+}
+
+function parsePriority(value: string | undefined): number {
+  if (value === undefined) return 0;
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function unquote(value: string): string {
@@ -98,8 +111,16 @@ export function validateSkills(skills: Skill[]): SkillIssue[] {
   return issues;
 }
 
+/**
+ * Deterministic routing order (C2): highest `priority` first, then alphabetical as a stable tiebreak.
+ * First match in this order wins, so a higher-priority gate (verification) beats a lower one (finishing).
+ */
+export function byPrecedence(a: Skill, b: Skill): number {
+  return (b.priority ?? 0) - (a.priority ?? 0) || a.name.localeCompare(b.name);
+}
+
 export function matchTriggers(skills: Skill[], userText: string): string | null {
-  const sorted = [...skills].sort((a, b) => a.name.localeCompare(b.name));
+  const sorted = [...skills].sort(byPrecedence);
   for (const skill of sorted) {
     for (const source of skill.triggers) {
       let regex: RegExp;
@@ -112,7 +133,7 @@ export function matchTriggers(skills: Skill[], userText: string): string | null 
 
 export function renderDispatcherTable(skills: Skill[]): string {
   const rows = [...skills]
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort(byPrecedence)
     .map(s => `| ${s.description} | \`${s.name}\` |`)
     .join("\n");
   return [

@@ -2,6 +2,7 @@
 name: tdd
 description: Use when implementing any feature or bugfix, before writing implementation code
 announce: Test-Driven Development
+priority: 20
 triggers:
   - "\\bimplement\\b"
   - "add (a |the )?(feature|function|method|endpoint|test)"

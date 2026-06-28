@@ -2,6 +2,7 @@
 name: receiving-code-review
 description: Use when receiving code review feedback, before implementing the suggestions
 announce: Receiving Code Review
+priority: 10
 triggers:
   - "here ?(is|'?s) (the|my|some|a) (code )?review"
   - "got (the|my|some|a) (code )?review"

@@ -2,6 +2,7 @@
 name: brainstorming
 description: Use before any new feature, component, or behavior change, before touching code
 announce: Brainstorming
+priority: 20
 triggers:
   - "new feature"
   - "let'?s (build|make|create|add)"

@@ -2,6 +2,7 @@
 name: verification
 description: Use to confirm that finished work actually runs and passes — run the tests/commands and check the output — before claiming it is done
 announce: Verification Before Completion
+priority: 20
 triggers:
   - "\\b(is|are) .{0,25}\\b(done|fixed|finished|complete)\\b"
   - "\\bdone\\s*(yet|already|now)\\b"

@@ -2,6 +2,7 @@
 name: debugging
 description: Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes
 announce: Systematic Debugging
+priority: 20
 triggers:
   - "\\bbug\\b"
   - "test(s)? (is|are )?failing"

@@ -2,6 +2,7 @@
 name: requesting-code-review
 description: Use to get completed code reviewed for correctness, bugs, and quality by a reviewer before merging
 announce: Requesting Code Review
+priority: 10
 triggers:
   - "review (my|this|the|our) (code|change|changes|pr|implementation|diff|work)"
   - "can you (do |run |perform )?review"

@@ -55,6 +55,26 @@ test("matchTriggers returns null on benign input (no false positives)", () => {
   assert.equal(matchTriggers(SKILLS, "what is 2 + 2"), null);
 });
 
+test("matchTriggers: higher priority wins when triggers overlap (C2)", () => {
+  // Both match "is it done" — verification (gate) must beat finishing (the thing it gates),
+  // even though "finishing" sorts before "verification" alphabetically.
+  const overlap = [
+    { name: "finishing", description: "ship it", announce: "Finishing",
+      triggers: ["done"], priority: 0, body: "FIN" },
+    { name: "verification", description: "verify first", announce: "Verification",
+      triggers: ["done"], priority: 20, body: "VER" },
+  ];
+  assert.equal(matchTriggers(overlap, "is it done?"), "verification");
+});
+
+test("matchTriggers: equal priority falls back to alphabetical (stable)", () => {
+  const tie = [
+    { name: "zebra", description: "z", announce: "Z", triggers: ["match"], priority: 5, body: "Z" },
+    { name: "alpha", description: "a", announce: "A", triggers: ["match"], priority: 5, body: "A" },
+  ];
+  assert.equal(matchTriggers(tie, "match this"), "alpha");
+});
+
 test("renderDispatcherTable lists every skill with name and description", () => {
   const table = renderDispatcherTable(SKILLS);
   assert.match(table, /debugging/);
