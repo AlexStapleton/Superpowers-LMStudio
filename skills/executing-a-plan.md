@@ -1,6 +1,6 @@
 ---
 name: executing-a-plan
-description: Use when given a written plan file to execute
+description: Use when a written plan ALREADY EXISTS and you need to carry it out task by task — the execution side. Not for authoring a new plan from a spec.
 announce: Executing a Written Plan
 triggers:
   - "execute (the|this|my) plan"
@@ -8,10 +8,13 @@ triggers:
   - "implement (the|this) plan"
   - "follow (the|this) plan"
   - "start (on |with )?(the|this) plan"
+  - "(wrote|written|created|have|finished|got) (the|a|our|my|this) plan"
+  - "start working through (the|this|it|our|my)"
+  - "work(ing)? through (the|our|my|this) plan"
 examples:
   - "execute the plan"
   - "follow the plan in docs/plans"
-  - "start on the plan"
+  - "we already wrote the plan down — let's start working through it one task at a time"
 ---
 
 Before doing anything else — including any tool call — output the line: "Using Executing a Written Plan —". Then proceed.
