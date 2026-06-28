@@ -148,34 +148,58 @@ test("loadSkills returns [] for a missing dir (graceful)", async () => {
 });
 
 const { decideWorkflowInjection } = require("../dist/skills.js");
+const S0 = { lastInjectedWorkflow: null, turnsSinceWorkflowInject: 0, noMatchStreak: 0 };
 
-test("decideWorkflowInjection: new match injects and resets the counter (C4)", () => {
-  const d = decideWorkflowInjection("tdd", { lastInjectedWorkflow: null, turnsSinceWorkflowInject: 0 }, 4);
+test("decideWorkflowInjection E1: new match injects and resets counters", () => {
+  const d = decideWorkflowInjection("tdd", S0, 4, 3);
   assert.equal(d.action, "injected");
-  assert.deepEqual(d.nextState, { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 0 });
+  assert.deepEqual(d.nextState, { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 0, noMatchStreak: 0 });
 });
 
-test("decideWorkflowInjection: same match dedups until the interval, then re-injects", () => {
-  let s = { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 0 };
-  const a = decideWorkflowInjection("tdd", s, 3); // 0->1
-  assert.equal(a.action, "deduped");
-  const b = decideWorkflowInjection("tdd", a.nextState, 3); // 1->2
-  assert.equal(b.action, "deduped");
-  const c = decideWorkflowInjection("tdd", b.nextState, 3); // 2->3 == interval
-  assert.equal(c.action, "reinjected");
+test("decideWorkflowInjection E2: same match dedups until the interval, then re-injects", () => {
+  let s = { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 0, noMatchStreak: 0 };
+  const a = decideWorkflowInjection("tdd", s, 3, 3); assert.equal(a.action, "deduped");
+  const b = decideWorkflowInjection("tdd", a.nextState, 3, 3); assert.equal(b.action, "deduped");
+  const c = decideWorkflowInjection("tdd", b.nextState, 3, 3); assert.equal(c.action, "reinjected");
   assert.equal(c.nextState.turnsSinceWorkflowInject, 0);
 });
 
-test("decideWorkflowInjection: interval 0 disables re-injection (suppress forever)", () => {
-  let s = { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 99 };
-  const d = decideWorkflowInjection("tdd", s, 0);
-  assert.equal(d.action, "deduped");
+test("decideWorkflowInjection E3+E4: no-match turns stay sticky, then expire at stickyTurns", () => {
+  let s = { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 0, noMatchStreak: 0 };
+  const a = decideWorkflowInjection(null, s, 99, 2); // streak 0->1
+  assert.equal(a.action, "sticky");
+  assert.equal(a.nextState.lastInjectedWorkflow, "tdd"); // still active -> gate stays on (E10)
+  const b = decideWorkflowInjection(null, a.nextState, 99, 2); // streak 1->2 == limit
+  assert.equal(b.action, "expired");
+  assert.equal(b.nextState.lastInjectedWorkflow, null);
 });
 
-test("decideWorkflowInjection: no match clears the active workflow", () => {
-  const d = decideWorkflowInjection(null, { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 2 }, 4);
-  assert.equal(d.action, "no-match");
-  assert.equal(d.nextState.lastInjectedWorkflow, null);
+test("decideWorkflowInjection E5: a different workflow matches -> immediate switch (no sticky carry)", () => {
+  const s = { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 5, noMatchStreak: 1 };
+  const d = decideWorkflowInjection("research", s, 4, 3);
+  assert.equal(d.action, "injected");
+  assert.equal(d.nextState.lastInjectedWorkflow, "research");
+});
+
+test("decideWorkflowInjection E6: re-matching the same workflow resets the no-match streak", () => {
+  const s = { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 1, noMatchStreak: 2 };
+  const d = decideWorkflowInjection("tdd", s, 99, 3);
+  assert.equal(d.nextState.noMatchStreak, 0);
+});
+
+test("decideWorkflowInjection E7: stickyTurns<=0 clears on the first no-match (legacy behavior)", () => {
+  const s = { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 0, noMatchStreak: 0 };
+  assert.equal(decideWorkflowInjection(null, s, 4, 0).action, "expired");
+});
+
+test("decideWorkflowInjection: no active workflow + no match stays no-match", () => {
+  assert.equal(decideWorkflowInjection(null, S0, 4, 3).action, "no-match");
+});
+
+test("decideWorkflowInjection E12: tolerates a state missing noMatchStreak (no NaN)", () => {
+  const d = decideWorkflowInjection(null, { lastInjectedWorkflow: "tdd", turnsSinceWorkflowInject: 0 }, 99, 2);
+  assert.equal(d.action, "sticky");
+  assert.equal(d.nextState.noMatchStreak, 1);
 });
 
 const { loadSkillsCached, skillsSignature } = require("../dist/skills.js");
