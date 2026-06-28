@@ -142,6 +142,10 @@ test("parseJudgeVerdict reads labeled VERDICT lines (reliable for small judges)"
   assert.equal(parseJudgeVerdict("VERDICT: FAIL\nREASON: jumped to a fix").pass, false);
   // tolerates markdown bold the model adds
   assert.equal(parseJudgeVerdict("**VERDICT:** PASS\n**REASON:** ok").pass, true);
+  // a line that is just PASS / FAIL (terse judges)
+  assert.equal(parseJudgeVerdict("Analysis...\nPASS").pass, true);
+  assert.equal(parseJudgeVerdict("**FAIL**").pass, false);
+  assert.equal(parseJudgeVerdict("**FAIL**").error, undefined);
 });
 
 test("parseJudgeVerdict still parses clean JSON, fenced JSON, and rejects garbage", () => {

@@ -233,6 +233,9 @@ export function parseJudgeVerdict(text: string): { pass: boolean; reason: string
   // 3) Loose fallback: a bare follows=true/false anywhere.
   const loose = text.match(/"?follows"?\s*[:=]\s*(true|false)/i);
   if (loose) return { pass: /true/i.test(loose[1]), reason: "" };
+  // 4) A line that is just PASS or FAIL (optionally markdown-bolded) — terse judges emit this.
+  const bare = text.match(/^\s*\**\s*(PASS|FAIL)\.?\s*\**\s*$/im);
+  if (bare) return { pass: /pass/i.test(bare[1]), reason: "" };
   // A judge that emits none of the above is a JUDGE failure, not a "did not follow" verdict — flag it
   // as an error so the runner EXCLUDES it from the adherence rate (counting it as a fail deflates the
   // metric). With the labeled format above this should now be rare even on a 12B.

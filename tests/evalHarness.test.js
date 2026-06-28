@@ -82,6 +82,29 @@ test("stub executor: list/read/search serve the sandbox; save_file is then reada
 
 // --- runConversation tool loop ---
 
+test("judge retries on an unparseable verdict, then parses the reformatted reply", async () => {
+  const orig = global.fetch;
+  // First judge reply is prose with no verdict line (unparseable); the retry returns the line.
+  global.fetch = mockFetch([
+    assistantText("The agent explored first and it seems mostly fine, hard to say definitively..."),
+    assistantText("VERDICT: PASS\nREASON: explored before concluding"),
+  ]);
+  try {
+    const v = await judgeAdherence({ baseUrl: "http://x/v1", model: "m", procedure: "P", prompt: "u", trajectory: { finalText: "", toolCalls: [] } });
+    assert.equal(v.pass, true);
+    assert.notEqual(v.error, true); // recovered — not thrown away as a judge error
+  } finally { global.fetch = orig; }
+});
+
+test("judge returns error only after all retries stay unparseable", async () => {
+  const orig = global.fetch;
+  global.fetch = mockFetch([assistantText("no verdict at all, just rambling")]); // repeats
+  try {
+    const v = await judgeAdherence({ baseUrl: "http://x/v1", model: "m", procedure: "P", prompt: "u", trajectory: { finalText: "", toolCalls: [] } });
+    assert.equal(v.error, true);
+  } finally { global.fetch = orig; }
+});
+
 test("runConversation captures tool calls (in order) then final text", async () => {
   const orig = global.fetch;
   global.fetch = mockFetch([assistantToolCall("use_workflow", '{"workflow":"tdd"}'), assistantText("Using TDD — done")]);
