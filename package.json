@@ -13,7 +13,8 @@
     "routing-stats": "npm run build && node scripts/routing-stats.js",
     "eval": "npm run build && node eval/run-eval.js",
     "judge-calibration": "npm run build && node eval/calibrate-judge.js",
-    "semantic-probe": "npm run build && node eval/semantic-probe.js"
+    "semantic-probe": "npm run build && node eval/semantic-probe.js",
+    "validate-skills": "npm run build && node scripts/validate-skills.js"
   },
   "author": "",
   "license": "GPL-3.0-or-later",

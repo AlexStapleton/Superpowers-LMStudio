@@ -112,3 +112,24 @@ test("loadSkills returns [] for a missing dir (graceful)", async () => {
   const skills = await loadSkills(["/nonexistent/skills/dir"]);
   assert.deepEqual(skills, []);
 });
+
+const { validateSkills } = require("../dist/skills.js");
+
+test("validateSkills flags missing fields, bad regex, dup names, no examples", () => {
+  const issues = validateSkills([
+    { name: "a", description: "", announce: "A", triggers: ["ok"], examples: ["x"] },     // missing description
+    { name: "a", description: "d", announce: "A", triggers: ["("], examples: ["x"] },      // dup name + bad regex
+    { name: "b", description: "d", announce: "B", triggers: ["ok"], examples: [] },          // no examples
+  ]);
+  assert.ok(issues.some(i => /missing description/.test(i.issue)));
+  assert.ok(issues.some(i => /duplicate name/.test(i.issue)));
+  assert.ok(issues.some(i => /invalid trigger regex/.test(i.issue)));
+  assert.ok(issues.some(i => /no examples/.test(i.issue)));
+});
+
+test("the real skills/ all pass validation (no silent dead skills)", async () => {
+  const path = require("node:path");
+  const skills = await loadSkills([path.join(__dirname, "..", "skills")]);
+  const issues = validateSkills(skills);
+  assert.deepEqual(issues, [], "skill validation issues:\n" + issues.map(i => `  ${i.skill}: ${i.issue}`).join("\n"));
+});

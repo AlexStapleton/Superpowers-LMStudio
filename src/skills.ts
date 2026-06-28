@@ -65,6 +65,39 @@ function unquote(value: string): string {
   return value;
 }
 
+export interface SkillIssue {
+  skill: string;
+  issue: string;
+}
+
+/**
+ * Validate loaded skills so a malformed one fails loudly instead of silently never firing (DoD5):
+ * required fields present, trigger regexes compile, names unique, every skill has examples.
+ */
+export function validateSkills(skills: Skill[]): SkillIssue[] {
+  const issues: SkillIssue[] = [];
+  const seen = new Set<string>();
+  for (const s of skills) {
+    const name = s.name || "(unnamed)";
+    if (!s.name) issues.push({ skill: name, issue: "missing name" });
+    if (s.name && seen.has(s.name)) issues.push({ skill: name, issue: "duplicate name" });
+    if (s.name) seen.add(s.name);
+    if (!s.description) issues.push({ skill: name, issue: "missing description" });
+    if (!s.announce) issues.push({ skill: name, issue: "missing announce" });
+    if (!s.examples || s.examples.length === 0) {
+      issues.push({ skill: name, issue: "no examples — routing is not eval-covered" });
+    }
+    for (const t of s.triggers || []) {
+      try {
+        new RegExp(t, "i");
+      } catch {
+        issues.push({ skill: name, issue: `invalid trigger regex: ${t}` });
+      }
+    }
+  }
+  return issues;
+}
+
 export function matchTriggers(skills: Skill[], userText: string): string | null {
   const sorted = [...skills].sort((a, b) => a.name.localeCompare(b.name));
   for (const skill of sorted) {
