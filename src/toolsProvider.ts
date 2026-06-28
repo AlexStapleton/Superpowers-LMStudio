@@ -192,13 +192,16 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         "Load the full procedure for a development workflow. You MUST call this and follow what "
         + "it returns BEFORE acting on a matching task. Available workflows: " + enumDesc,
       parameters: { workflow: z.enum(skillNames) },
-      implementation: async ({ workflow }) => {
+      implementation: async ({ workflow }, ctx) => {
         const skill = loadedSkills.find(s => s.name === workflow);
         if (!skill) {
           return { error: `Unknown workflow '${workflow}'. Valid: ${skillNames.join(", ")}` };
         }
         activeWorkflow = workflow;
         if (workflow === "tdd") tddTestSeen = false;
+        // Surface the announcement deterministically (the user sees which workflow is active) instead
+        // of relying on the small model to echo it — mirrors the router auto-load path's status block.
+        try { ctx.status(`Using ${skill.announce} —`); } catch { /* status is best-effort */ }
         await appendRoutingEvent(pluginConfig.get("enableRoutingLog"), { kind: "tool", workflow });
         return buildWorkflowToolResult(skill);
       },

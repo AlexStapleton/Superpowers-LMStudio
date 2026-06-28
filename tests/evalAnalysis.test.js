@@ -81,7 +81,10 @@ test("announce is code-guaranteed when the router auto-loads the workflow (plugi
   const loaded = scoreCase(c, { finalText: "", toolCalls: [] }, undefined, { routerMatched: "tdd" });
   assert.equal(loaded.checks[0].pass, true);
   assert.match(loaded.checks[0].detail, /code-surfaced/);
-  // Model must self-route (router did not load it) → announce still depends on the model's text.
+  // Model self-invoked use_workflow → the tool surfaces the announce via ctx.status → also guaranteed.
+  const viaTool = scoreCase(c, { finalText: "", toolCalls: [{ name: "use_workflow", args: { workflow: "tdd" } }] }, undefined, { routerMatched: null });
+  assert.equal(viaTool.checks[0].pass, true);
+  // Neither router nor a use_workflow call → announce still depends on the model's text.
   const selfRoute = scoreCase(c, { finalText: "", toolCalls: [] }, undefined, { routerMatched: null });
   assert.equal(selfRoute.checks[0].pass, false);
   const selfRouteOk = scoreCase(c, { finalText: "Using Test-Driven Development — ok", toolCalls: [] }, undefined, { routerMatched: null });

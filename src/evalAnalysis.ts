@@ -127,11 +127,13 @@ export function scoreCase(
   adherence?: { pass: boolean; reason?: string; error?: boolean },
   opts: { routerMatched?: string | null } = {},
 ): CaseResult {
-  // When the code router auto-loads the correct workflow, the plugin surfaces "Using X —" itself via
-  // a status block (createStatus) — so the announce is guaranteed regardless of whether the model
-  // narrates it. Only when the model must self-route (router did NOT load it) does announce depend on
-  // the model's text. This keeps the eval faithful to real plugin behavior.
-  const announceCodeGuaranteed = !!c.announce && opts.routerMatched === c.workflow;
+  // The plugin surfaces "Using X —" itself via a status block on BOTH load paths — the router
+  // auto-load (createStatus in the preprocessor) and the model self-invoking use_workflow (ctx.status
+  // in the tool). So whenever the correct workflow was loaded by code, the announce is guaranteed
+  // regardless of whether the model narrates it. Only a case where neither happened depends on the
+  // model's text. This keeps the eval faithful to real plugin behavior.
+  const selfInvoked = traj.toolCalls.some(t => t.name === "use_workflow" && t.args?.workflow === c.workflow);
+  const announceCodeGuaranteed = !!c.announce && (opts.routerMatched === c.workflow || selfInvoked);
   const checks: CheckResult[] = c.checks.map(name => {
     switch (name) {
       case "announce":
