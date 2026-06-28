@@ -125,6 +125,15 @@ test("formatTrajectory lists assistant text and tool calls in order, flagging bl
   assert.match(formatTrajectory({ finalText: "", toolCalls: [{ name: "save_file", args: {}, status: "BLOCKED" }] }), /BLOCKED — did NOT execute/);
 });
 
+test("formatTrajectory caps long tool-call args so a big save_file doesn't bloat the judge prompt", () => {
+  const big = "x".repeat(5000);
+  const s = formatTrajectory({ finalText: "", toolCalls: [{ name: "save_file", args: { file_name: "a.js", content: big } }] });
+  assert.ok(s.length < 400, "args must be truncated, not dumped in full");
+  assert.match(s, /save_file/);
+  assert.match(s, /a\.js/); // the useful part (file name) survives
+  assert.match(s, /…/);     // truncation marker present
+});
+
 test("buildJudgePrompt includes procedure, prompt, and asks for a labeled VERDICT", () => {
   const p = buildJudgePrompt("PROCEDURE_BODY", "USER_PROMPT", { finalText: "x", toolCalls: [] });
   assert.match(p, /PROCEDURE_BODY/);

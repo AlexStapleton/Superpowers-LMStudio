@@ -176,7 +176,12 @@ export function formatTrajectory(traj: Trajectory): string {
     ? traj.toolCalls
         .map((c, i) => {
           const tag = c.status && c.status !== "ok" ? ` [${c.status} — did NOT execute]` : "";
-          return `${i + 1}. ${c.name}(${JSON.stringify(c.args)})${tag}`;
+          // Cap per-call args: a save_file's full `content` would otherwise bloat the judge prompt
+          // (esp. with maxTurns=12), making a small judge ramble past the VERDICT line (unparseable).
+          // The judge needs the tool name + file names + sequence, not full file bodies.
+          const argStr = JSON.stringify(c.args);
+          const args = argStr.length > 160 ? argStr.slice(0, 160) + "…" : argStr;
+          return `${i + 1}. ${c.name}(${args})${tag}`;
         })
         .join("\n")
     : "(no tool calls)";
