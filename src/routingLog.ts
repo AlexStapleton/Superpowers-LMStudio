@@ -21,7 +21,7 @@ export type RoutingEvent =
       matched: string | null;
       /** How it matched — keyword regex, semantic embedding, or none. */
       via?: "keyword" | "semantic" | "none";
-      action: "injected" | "reinjected" | "deduped" | "disabled" | "no-match";
+      action: "injected" | "reinjected" | "deduped" | "sticky" | "expired" | "disabled" | "no-match";
       /** Truncated user message for context (local-only log). */
       promptPreview: string;
     }
@@ -100,7 +100,11 @@ export function summarizeRoutingLog(jsonl: string): RoutingSummary {
           if (e.matched) summary.byWorkflowRouter[e.matched] = (summary.byWorkflowRouter[e.matched] ?? 0) + 1;
           break;
         case "deduped":
+        case "sticky":
           summary.router.deduped++;
+          break;
+        case "expired":
+          summary.router.noMatch++;
           break;
         case "disabled":
           summary.router.disabled++;

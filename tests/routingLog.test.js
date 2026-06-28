@@ -32,6 +32,18 @@ test("summarizeRoutingLog aggregates router and tool events", () => {
   assert.deepEqual(s.byWorkflowTool, { "explaining-code": 2, debugging: 1 });
 });
 
+test("summarizeRoutingLog counts sticky as deduped and expired as noMatch", () => {
+  const lines = [
+    { kind: "router", matched: "debugging", action: "sticky", promptPreview: "follow-up turn" },
+    { kind: "router", matched: null, action: "expired", promptPreview: "unrelated turn" },
+  ].map(e => JSON.stringify({ ts: "2026-06-28T00:00:00Z", ...e })).join("\n");
+
+  const s = summarizeRoutingLog(lines);
+  assert.equal(s.routerTurns, 2);
+  assert.equal(s.router.deduped, 1);
+  assert.equal(s.router.noMatch, 1);
+});
+
 test("summarizeRoutingLog counts malformed lines without crashing", () => {
   const input = [
     JSON.stringify({ ts: "t", kind: "tool", workflow: "tdd" }),
