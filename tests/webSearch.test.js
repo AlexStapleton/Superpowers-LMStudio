@@ -1,6 +1,17 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { normalizeSearchQueries, stripPageBoilerplate } = require("../dist/webSearch.js");
+const { normalizeSearchQueries, stripPageBoilerplate, isTextualContentType } = require("../dist/webSearch.js");
+
+test("isTextualContentType accepts html/text/json, rejects pdf/binary, defaults true when missing", () => {
+  assert.equal(isTextualContentType("text/html; charset=utf-8"), true);
+  assert.equal(isTextualContentType("application/json"), true);
+  assert.equal(isTextualContentType("application/xml"), true);
+  assert.equal(isTextualContentType("application/pdf"), false);
+  assert.equal(isTextualContentType("application/octet-stream"), false);
+  assert.equal(isTextualContentType("image/png"), false);
+  assert.equal(isTextualContentType(null), true); // missing header → don't false-reject
+  assert.equal(isTextualContentType(""), true);
+});
 
 test("normalizeSearchQueries accepts a single string", () => {
   assert.deepEqual(normalizeSearchQueries("climate change 2026", undefined), ["climate change 2026"]);

@@ -20,7 +20,7 @@ import { backgroundCommands, generateId, BackgroundCommand } from "./backgroundC
 import { loadSkillsCached, getSkillsDirCandidates, buildWorkflowToolResult } from "./skills";
 import { appendRoutingEvent } from "./routingLog";
 import { isTestFile, evaluateGuardrail, resolveActiveWorkflow, webSearchFetchDirective, type TddGuardrailMode } from "./guardrails";
-import { normalizeSearchQueries, stripPageBoilerplate, WEB_FETCH_HEADERS } from "./webSearch";
+import { normalizeSearchQueries, stripPageBoilerplate, isTextualContentType, WEB_FETCH_HEADERS } from "./webSearch";
 import { findSystemBrowserPath } from "./findBrowser";
 
 import type { Browser, Page } from "puppeteer";
@@ -1827,6 +1827,10 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
+        const contentType = response.headers.get("content-type");
+        if (!isTextualContentType(contentType)) {
+          return { url, status: response.status, error: `Not text-extractable (content-type: ${contentType}). Likely a PDF or binary — try an HTML source or a different URL.` };
+        }
         let text = await response.text();
 
         const result: any = {
@@ -1874,6 +1878,10 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         const response = await fetch(url, { headers: WEB_FETCH_HEADERS, signal: AbortSignal.timeout(15000) });
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const contentType = response.headers.get("content-type");
+        if (!isTextualContentType(contentType)) {
+          return { error: `Not text-extractable (content-type: ${contentType}). Likely a PDF or binary — try an HTML source or a different URL.` };
         }
         let text = await response.text();
 

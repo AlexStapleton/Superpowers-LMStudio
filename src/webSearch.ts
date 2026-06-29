@@ -44,6 +44,16 @@ export function normalizeSearchQueries(query: unknown, queries: unknown, max = 5
 }
 
 /**
+ * Whether a content-type is text-extractable. Guards the fetch tools from running html-to-text on a
+ * PDF/binary (which yields garbage the model treats as real content). Missing/empty type → assume
+ * textual, since many servers omit it and we don't want false rejects. Pure.
+ */
+export function isTextualContentType(contentType: string | null | undefined): boolean {
+  if (!contentType) return true;
+  return /text\/|html|xml|json|rss|atom|javascript|application\/xhtml/i.test(contentType);
+}
+
+/**
  * Strip obvious boilerplate from html-to-text output so a content-less landing page (nav menus + icon
  * sprites, e.g. the Copernicus highlights page) doesn't read as the article and waste the model's
  * fetch. Conservative: removes the "skip to main content" marker and concatenated icon/sprite runs
