@@ -20,6 +20,7 @@ import { backgroundCommands, generateId, BackgroundCommand } from "./backgroundC
 import { loadSkillsCached, getSkillsDirCandidates, buildWorkflowToolResult } from "./skills";
 import { appendRoutingEvent } from "./routingLog";
 import { isTestFile, evaluateGuardrail, resolveActiveWorkflow, webSearchFetchDirective, type TddGuardrailMode } from "./guardrails";
+import { normalizeSearchQueries, stripPageBoilerplate } from "./webSearch";
 import { findSystemBrowserPath } from "./findBrowser";
 
 import type { Browser, Page } from "puppeteer";
@@ -1452,14 +1453,17 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
 
   const webSearchTool = tool({
     name: "web_search",
-    description: "Search the web using multiple providers (DuckDuckGo, Google, Bing). Uses no-key, no-Chrome providers first, then browser providers as fallback.",
+    description: "Search the web using multiple providers (DuckDuckGo, Google, Bing). Provide one query, or several at once (an array in `query`, or via `queries`) to run them together and merge results. Uses no-key, no-Chrome providers first, then browser providers as fallback.",
     parameters: {
-      query: z.string(),
+      query: z.union([z.string(), z.array(z.string())]).optional()
+        .describe("A search query, or an array of queries to run together and merge."),
+      queries: z.array(z.string()).optional()
+        .describe("Alias for `query`: multiple queries to run together and merge."),
       providers: z.array(z.enum(["duckduckgo-api", "duckduckgo-fetch", "duckduckgo-html", "google", "bing"]))
         .optional()
         .describe("Optional: List of specific providers. If omitted, fallback chain is: DDG Fetch (no Chrome) -> DDG API -> DDG browser -> Google -> Bing."),
     },
-    implementation: async ({ query, providers }) => {
+    implementation: async ({ query, queries, providers }) => {
       type SearchProvider = "duckduckgo-api" | "duckduckgo-fetch" | "duckduckgo-html" | "google" | "bing";
       type SearchResult = { title: string; link: string; snippet: string; provider: SearchProvider };
 
@@ -1509,18 +1513,28 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         const parsedResults: SearchResult[] = [];
         const titleRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
         let match: RegExpExecArray | null;
+        let firstBlockIdx = -1;
 
         while ((match = titleRegex.exec(html)) !== null) {
+          if (firstBlockIdx < 0) firstBlockIdx = match.index;
           const link = normalizeDuckDuckGoLink(match[1]);
           const title = stripHtml(match[2]);
           const nearbyHtml = html.slice(match.index, Math.min(html.length, match.index + 1800));
-          const snippetMatch = nearbyHtml.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/(?:a|div)>/i);
+          // Tolerant class match: DDG snippets carry extra classes (e.g. "result__snippet js-..."), which
+          // the old quote-exact selector missed — leaving snippets empty while titles still parsed.
+          const snippetMatch = nearbyHtml.match(/class="[^"]*\bresult__snippet\b[^"]*"[^>]*>([\s\S]*?)<\/(?:a|div)>/i);
           const snippet = snippetMatch ? stripHtml(snippetMatch[1]) : "";
 
           if (title && link) {
             parsedResults.push({ title, link, snippet, provider });
           }
           if (parsedResults.length >= 10) break;
+        }
+
+        // Instrument (don't guess): results but zero snippets means the markup changed again — surface a
+        // raw sample in meta.trace so the next real run reveals the current selector to fix precisely.
+        if (parsedResults.length > 0 && parsedResults.every(r => !r.snippet) && firstBlockIdx >= 0) {
+          logs.push(`[ddg-parse] ${provider}: ${parsedResults.length} results, 0 snippets — markup sample: ${html.slice(firstBlockIdx, firstBlockIdx + 500).replace(/\s+/g, " ")}`);
         }
 
         return parsedResults;
@@ -1655,6 +1669,14 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         },
       };
 
+      const queryList = normalizeSearchQueries(query, queries);
+      if (queryList.length === 0) {
+        return { error: "web_search needs a non-empty 'query' (string or array of strings) or 'queries' (array of strings)." };
+      }
+
+      // Run each query through the provider logic and accumulate; the cross-query dedup below collapses
+      // overlap. The model reliably asks for multiple queries at once — this is what makes that work.
+      for (const query of queryList) {
       if (providers && providers.length > 0) {
         for (const providerKey of providers) {
           try {
@@ -1698,6 +1720,8 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
           }
         }
       }
+
+      } // end per-query loop
 
       const browserToClose = sharedBrowser as Browser | null;
       if (browserToClose) {
@@ -1816,6 +1840,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         });
 
         text = compiledConvert(text);
+        text = stripPageBoilerplate(text);
 
         result.content = text.substring(0, 40000) + (text.length > 40000 ? "... (truncated)" : "");
 
