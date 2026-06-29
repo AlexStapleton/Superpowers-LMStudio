@@ -158,6 +158,18 @@ test("parseJudgeVerdict reads labeled VERDICT lines (reliable for small judges)"
   assert.equal(parseJudgeVerdict("**FAIL**").error, undefined);
 });
 
+test("parseJudgeVerdict tolerates a rambly judge: VERDICT-then-prose and plain natural language", () => {
+  // VERDICT label but the word comes after some prose
+  assert.equal(parseJudgeVerdict("VERDICT: the agent reproduced first, so PASS.").pass, true);
+  assert.equal(parseJudgeVerdict("VERDICT - on balance this is a FAIL").pass, false);
+  // no VERDICT label at all — natural language, negation wins
+  assert.equal(parseJudgeVerdict("The agent did not follow the procedure.").pass, false);
+  assert.equal(parseJudgeVerdict("The agent did not follow the procedure.").error, undefined);
+  assert.equal(parseJudgeVerdict("Overall the agent followed the procedure correctly.").pass, true);
+  // still unparseable when there's truly no signal
+  assert.equal(parseJudgeVerdict("Hmm, hard to say, let me think about it more.").error, true);
+});
+
 test("parseJudgeVerdict still parses clean JSON, fenced JSON, and rejects garbage", () => {
   assert.equal(parseJudgeVerdict('{"follows": true, "reason": "wrote a test first"}').pass, true);
   const fenced = parseJudgeVerdict('Sure!\n```json\n{"follows": false, "reason": "jumped to a fix"}\n```');

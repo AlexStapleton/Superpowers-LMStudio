@@ -241,9 +241,19 @@ export function parseJudgeVerdict(text: string): { pass: boolean; reason: string
   // 4) A line that is just PASS or FAIL (optionally markdown-bolded) — terse judges emit this.
   const bare = text.match(/^\s*\**\s*(PASS|FAIL)\.?\s*\**\s*$/im);
   if (bare) return { pass: /pass/i.test(bare[1]), reason: "" };
+  // 5) Labeled but rambly: "VERDICT: the agent passed, so PASS." — find PASS/FAIL shortly after VERDICT.
+  const v2 = text.match(/\bVERDICT\b[\s\S]{0,80}?\b(PASS|FAIL|YES|NO|TRUE|FALSE)\b/i);
+  if (v2) return { pass: /^(PASS|YES|TRUE)$/i.test(v2[1]), reason: "" };
+  // 6) Natural language — negation/FAIL checked FIRST (a "does not follow" also contains "follow").
+  if (/\b(not follow|n't follow|fail(s|ed)? to (follow|adhere|reproduce|run|search|verify)|violat|does not adhere|n't adhere)\b/i.test(text)) {
+    return { pass: false, reason: "" };
+  }
+  if (/\b(follows the|followed the|did follow|correctly follow|adheres to|adhered to)\b/i.test(text)) {
+    return { pass: true, reason: "" };
+  }
   // A judge that emits none of the above is a JUDGE failure, not a "did not follow" verdict — flag it
   // as an error so the runner EXCLUDES it from the adherence rate (counting it as a fail deflates the
-  // metric). With the labeled format above this should now be rare even on a 12B.
+  // metric).
   return { pass: false, error: true, reason: "unparseable judge response" };
 }
 

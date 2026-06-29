@@ -9,6 +9,7 @@ const VOTES = Math.max(1, parseInt(process.env.EVAL_JUDGE_VOTES || "1", 10));
 
 async function singleJudge({ baseUrl, model, messages }) {
   let lastErr;
+  let lastText = "";
   let convo = messages;
   // Up to 3 attempts. A small judge usually DID decide in prose but never emitted the verdict line —
   // so on an unparseable reply we feed its own answer back and demand ONLY the line. This converts
@@ -16,6 +17,7 @@ async function singleJudge({ baseUrl, model, messages }) {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const text = await chatOnce({ baseUrl, model, messages: convo, temperature: 0 });
+      lastText = text;
       const verdict = parseJudgeVerdict(text);
       if (!verdict.error) return verdict;
       convo = [
@@ -27,9 +29,11 @@ async function singleJudge({ baseUrl, model, messages }) {
       lastErr = e;
     }
   }
-  // error: true so the runner can EXCLUDE this from the adherence rate (a judge/infra failure is not
-  // a "did not follow" verdict).
-  return { pass: false, error: true, reason: lastErr ? `judge error: ${lastErr.message}` : "unparseable judge response" };
+  // error: true so the runner EXCLUDES this from the adherence rate. Instrument the actual judge text
+  // on unparseable so we can diagnose the residual instead of guessing (the report shows this detail).
+  if (lastErr) return { pass: false, error: true, reason: `judge error: ${lastErr.message}` };
+  const snippet = lastText ? ` — judge said: «${String(lastText).replace(/\s+/g, " ").trim().slice(0, 160)}»` : "";
+  return { pass: false, error: true, reason: `unparseable judge response${snippet}` };
 }
 
 async function judgeAdherence({ baseUrl, model, procedure, prompt, trajectory }) {
