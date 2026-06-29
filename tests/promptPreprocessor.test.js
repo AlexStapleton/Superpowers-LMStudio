@@ -1,7 +1,28 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { getSubAgentDocsCandidatePaths, currentDateLine } = require("../dist/promptPreprocessor.js");
+const { getSubAgentDocsCandidatePaths, currentDateLine, buildDelegationHint } = require("../dist/promptPreprocessor.js");
+
+// Regression: the delegation hint must NOT be injected when the secondary-agent feature is off (the
+// default) — the tools are gated on enableSecondaryAgent, so hinting otherwise points at a missing tool.
+const RT = {
+  delegationHintAlways: "ALWAYS",
+  delegationHintWhenUseful: "WHEN_USEFUL",
+  delegationHintWhenUsefulDebug: "_DBG",
+  delegationHintHardTasks: "HARD",
+};
+test("buildDelegationHint returns nothing while the secondary agent is disabled", () => {
+  assert.equal(buildDelegationHint(false, "always", false, RT), "");
+  assert.equal(buildDelegationHint(false, "when_useful", true, RT), "");
+  assert.equal(buildDelegationHint(false, "hard_tasks", false, RT), "");
+});
+test("buildDelegationHint maps frequency (and debug suffix) only when enabled", () => {
+  assert.equal(buildDelegationHint(true, "always", false, RT), "ALWAYS");
+  assert.equal(buildDelegationHint(true, "when_useful", false, RT), "WHEN_USEFUL");
+  assert.equal(buildDelegationHint(true, "when_useful", true, RT), "WHEN_USEFUL_DBG");
+  assert.equal(buildDelegationHint(true, "hard_tasks", false, RT), "HARD");
+  assert.equal(buildDelegationHint(true, "off", false, RT), "");
+});
 
 // Date injection: a 12B won't reliably call get_current_datetime, so "next/latest/current" questions
 // are unanswerable without an ambient date. Pure + local-TZ-stable (local construction + local getters).

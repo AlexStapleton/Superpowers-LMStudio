@@ -62,6 +62,30 @@ export function currentDateLine(now: Date): string {
   return `Today's date is ${y}-${m}-${d}.`;
 }
 
+/**
+ * Delegation-hint selector (bugfix). The hint must only appear when the secondary-agent tools are
+ * actually registered — they're gated on `enableSecondaryAgent`, so hinting while the feature is OFF
+ * (the default) nudges a 12B toward a capability it doesn't have: wasted tokens + confused half-turns.
+ * Pure + testable. Returns "" when delegation is disabled or no frequency matches.
+ */
+export function buildDelegationHint(
+  enableSecondaryAgent: boolean,
+  frequency: string,
+  debugMode: boolean,
+  rt: {
+    delegationHintAlways: string;
+    delegationHintWhenUseful: string;
+    delegationHintWhenUsefulDebug: string;
+    delegationHintHardTasks: string;
+  },
+): string {
+  if (!enableSecondaryAgent) return "";
+  if (frequency === "always") return rt.delegationHintAlways;
+  if (frequency === "when_useful") return rt.delegationHintWhenUseful + (debugMode ? rt.delegationHintWhenUsefulDebug : "");
+  if (frequency === "hard_tasks") return rt.delegationHintHardTasks;
+  return "";
+}
+
 export function getSubAgentDocsCandidatePaths(currentWorkingDirectory: string): string[] {
   return [
     join(dirname(__dirname), "subagent_docs.md"),
@@ -249,17 +273,11 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
       planHint = rt.planHintWhenUseful;
   }
 
-  let delegationHint = "";
-  if (frequency === "always") {
-      delegationHint = rt.delegationHintAlways;
-  } else if (frequency === "when_useful") {
-      delegationHint = rt.delegationHintWhenUseful;
-      if (debugMode) {
-          delegationHint += rt.delegationHintWhenUsefulDebug;
-      }
-  } else if (frequency === "hard_tasks") {
-      delegationHint = rt.delegationHintHardTasks;
-  }
+  // Gate on enableSecondaryAgent: the delegation tools are only registered when it's on, so the hint
+  // must be too — otherwise we nudge the model toward a tool it doesn't have.
+  const delegationHint = buildDelegationHint(
+    pluginConfig.get("enableSecondaryAgent"), frequency, debugMode, rt,
+  );
 
   if (delegationHint) {
       currentContent += delegationHint;
