@@ -84,7 +84,11 @@ all pick it up automatically — no TypeScript changes required.
 
 - **File system:** read/write, ranged reads, surgical edits (`replace_text_in_file`,
   `insert_at_line`, `multi_replace_text`), search (`search_in_file`, `search_directory`,
-  `find_files`, `fuzzy_find_local_files`), `get_current_directory`.
+  `find_files` (name **or glob**, e.g. `**/router*`), `fuzzy_find_local_files`),
+  `get_current_directory`. Reads accept **absolute paths** and auto-root the workspace at the
+  referenced project, so the model can explore it freely for context; writes stay scoped to that
+  project. A code-enforced **Protected Paths** deny-list blocks secrets (`.ssh`, `.env*`, `*.pem`/
+  `*.key`, cloud creds…) on every read, write, and search.
 - **Execution (opt-in):** shell, interactive terminal, background commands, Python, JavaScript
   (Deno-sandboxed), test runner. All gated behind per-tool safety toggles, **off by default**.
 - **Web & RAG:** `web_search`, `fetch_web_content`, `wikipedia_search`, persistent browser
@@ -107,8 +111,9 @@ npm install
 lms dev          # run from the project dir; LM Studio hot-reloads on src/ changes
 ```
 
-> **Note:** after adding or editing a `skills/*.md` file, restart `lms dev` — the skill
-> registry caches at process start and the watcher only tracks `src/`.
+> **Note:** `skills/*.md` edits hot-reload — the skill cache busts on file mtime, so a changed
+> skill takes effect on the next turn without restarting `lms dev`. (Adding a brand-new skill file
+> the watcher hasn't seen may still need a restart.)
 
 Run the full check suite (typecheck + build + tests):
 
@@ -127,6 +132,8 @@ In the LM Studio **Plugins** tab:
 - **Plan Mode** — when the model should explore and propose a plan before changing code.
 - **Allow Git Operations / GitHub CLI Tools**.
 - **Secondary / sub-agent** settings — endpoint, model, permissions, profiles.
+- **Protected Paths** — glob patterns the model may not read/write/search. These *add* to built-in
+  defaults that already block credentials and secrets, so the broad file access stays safe by default.
 - **Default Workspace Path**, memory, language, and more.
 
 ## Credits & License
