@@ -1,6 +1,16 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { isTestFile, isSourceCodeFile, evaluateTddGuardrail, evaluateGuardrail, resolveActiveWorkflow } = require("../dist/guardrails.js");
+const { isTestFile, isSourceCodeFile, evaluateTddGuardrail, evaluateGuardrail, resolveActiveWorkflow, webSearchFetchDirective } = require("../dist/guardrails.js");
+
+// Fetch-before-answer guardrail: a web_search returns snippets, and a 12B will answer from them
+// (the #1 failure research.md warns against). Keyed on the SEARCH act, not on the research workflow
+// being routed — so it fires even when routing never loaded the procedure.
+test("webSearchFetchDirective tells the model to read a source before answering", () => {
+  const d = webSearchFetchDirective();
+  assert.match(d, /fetch_web_content/);
+  assert.match(d, /rag_web_content/);
+  assert.match(d, /snippet/i);
+});
 
 test("resolveActiveWorkflow: router injection wins; tool invoke is the fallback (gate connects to router path)", () => {
   // The dominant path: router auto-loaded tdd, model never called use_workflow → gate must still fire.

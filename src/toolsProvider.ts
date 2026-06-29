@@ -19,7 +19,7 @@ import { validateToolCall } from "./toolCallValidator";
 import { backgroundCommands, generateId, BackgroundCommand } from "./backgroundCommands";
 import { loadSkillsCached, getSkillsDirCandidates, buildWorkflowToolResult } from "./skills";
 import { appendRoutingEvent } from "./routingLog";
-import { isTestFile, evaluateGuardrail, resolveActiveWorkflow, type TddGuardrailMode } from "./guardrails";
+import { isTestFile, evaluateGuardrail, resolveActiveWorkflow, webSearchFetchDirective, type TddGuardrailMode } from "./guardrails";
 import { findSystemBrowserPath } from "./findBrowser";
 
 import type { Browser, Page } from "puppeteer";
@@ -1730,6 +1730,9 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
 
       return {
         results: dedupedResults,
+        // Fetch-before-answer guardrail (D3): push the model to read a source instead of answering
+        // from snippets. Deterministic, attached to the search result itself.
+        directive: webSearchFetchDirective(),
         meta: {
           total_found: dedupedResults.length,
           providers_used: [...new Set(dedupedResults.map(r => r.provider))],

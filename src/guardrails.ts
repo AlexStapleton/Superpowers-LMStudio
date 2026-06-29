@@ -53,6 +53,25 @@ export function evaluateTddGuardrail(opts: {
 }
 
 /**
+ * Fetch-before-answer guardrail (D3). A web_search returns snippets; the judged eval + a real
+ * "when is the next England World Cup game" run showed a 12B answers straight from those snippets —
+ * the exact failure research.md warns against ("The snippet says enough → read the full page") — and
+ * often gets it wrong/stale. This is keyed on the SEARCH act (attached to the web_search tool result),
+ * NOT on the research workflow being routed, so it fires even when the router never loaded research.
+ * Like the other guardrails it enforces via a tool's return value — the plugin has no post-generation
+ * hook to hard-block free text, so this is a deterministic directive at the search boundary.
+ */
+export function webSearchFetchDirective(): string {
+  return (
+    "MANDATORY NEXT STEP — these are search snippets, not sources. Before you answer, call " +
+    "fetch_web_content(url) (or rag_web_content(url, query) for a long page) on the most relevant " +
+    "result and base your answer on the page content. Do NOT answer from these snippets alone: they " +
+    "are truncated and often stale. If the question is time-relative (\"next\", \"latest\", \"current\"), " +
+    "anchor it to today's date stated in context."
+  );
+}
+
+/**
  * General workflow code-gate (DoD2): dispatches by active workflow.
  *  - tdd: no production code before a test (see evaluateTddGuardrail).
  *  - brainstorming: no source code at all — it's a DESIGN phase; design docs (.md) are fine.

@@ -49,6 +49,19 @@ async function semanticRoute(
 
 type DocumentContextInjectionStrategy = "none" | "inject-full-content" | "retrieval";
 
+/**
+ * Ambient current date (D3). A 12B won't reliably call get_current_datetime, so any time-relative
+ * question ("when is the NEXT…", "the LATEST…", "is X out yet") is unanswerable — it has no anchor for
+ * "now". Injecting the date every turn is deterministic and ~8 tokens. Uses LOCAL date (the plugin runs
+ * on the user's machine); local construction + local getters make it timezone-stable in tests.
+ */
+export function currentDateLine(now: Date): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `Today's date is ${y}-${m}-${d}.`;
+}
+
 export function getSubAgentDocsCandidatePaths(currentWorkingDirectory: string): string[] {
   return [
     join(dirname(__dirname), "subagent_docs.md"),
@@ -354,6 +367,10 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
 
     currentContent = `${injectionContent}\n\n---\n\n${currentContent}`;
   }
+
+  // Ambient date (D3): prepend on EVERY turn so the model can anchor "next/latest/current" questions.
+  // Done last so it lands at the very top of the assembled context.
+  currentContent = currentDateLine(new Date()) + "\n\n" + currentContent;
 
   // Return the final content string if it changed, otherwise the original message
   // (The SDK expects a string to replace content, or the message object)

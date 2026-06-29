@@ -233,11 +233,22 @@ async function chatOnce({ baseUrl, model, messages, temperature = 0, timeoutMs =
     {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ model, messages, temperature, stream: false, max_tokens: 1500 }),
+      // max_tokens was 1500: a channel-emitting model (Gemma harmony tokens leak into the agent
+      // trajectories) can spend that whole budget reasoning and get truncated BEFORE any content —
+      // yielding an empty completion the judge reads as "unparseable". 4096 gives the verdict room.
+      body: JSON.stringify({ model, messages, temperature, stream: false, max_tokens: 4096 }),
     },
     timeoutMs,
   );
-  return data?.choices?.[0]?.message?.content || "";
+  const choice = data?.choices?.[0];
+  const msg = choice?.message || {};
+  // Some local runtimes put the answer in reasoning_content and leave content empty (Gemma + the
+  // OpenAI-compat reasoning split). Fall back so the judge can still find its VERDICT line.
+  const text = msg.content || msg.reasoning_content || "";
+  // Still nothing: surface finish_reason so an unparseable verdict is diagnosable (e.g. "length" =
+  // truncated, "stop" = the model genuinely returned empty) instead of a bare "unparseable".
+  if (!text && choice?.finish_reason) return `[empty completion; finish_reason=${choice.finish_reason}]`;
+  return text;
 }
 
 // Embeddings via the OpenAI-compatible endpoint (for the semantic router, C1). Returns an array of

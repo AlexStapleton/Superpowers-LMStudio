@@ -1,7 +1,14 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { getSubAgentDocsCandidatePaths } = require("../dist/promptPreprocessor.js");
+const { getSubAgentDocsCandidatePaths, currentDateLine } = require("../dist/promptPreprocessor.js");
+
+// Date injection: a 12B won't reliably call get_current_datetime, so "next/latest/current" questions
+// are unanswerable without an ambient date. Pure + local-TZ-stable (local construction + local getters).
+test("currentDateLine formats the local date as 'Today's date is YYYY-MM-DD.'", () => {
+  assert.equal(currentDateLine(new Date(2026, 5, 29)), "Today's date is 2026-06-29.");
+  assert.equal(currentDateLine(new Date(2026, 0, 5)), "Today's date is 2026-01-05.");
+});
 
 test("getSubAgentDocsCandidatePaths prefers plugin path then workspace fallback", () => {
   const workspace = path.resolve("/tmp/workspace");
