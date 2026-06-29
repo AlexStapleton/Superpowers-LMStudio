@@ -20,7 +20,7 @@ import { backgroundCommands, generateId, BackgroundCommand } from "./backgroundC
 import { loadSkillsCached, getSkillsDirCandidates, buildWorkflowToolResult } from "./skills";
 import { appendRoutingEvent } from "./routingLog";
 import { isTestFile, evaluateGuardrail, resolveActiveWorkflow, webSearchFetchDirective, type TddGuardrailMode } from "./guardrails";
-import { normalizeSearchQueries, stripPageBoilerplate } from "./webSearch";
+import { normalizeSearchQueries, stripPageBoilerplate, WEB_FETCH_HEADERS } from "./webSearch";
 import { findSystemBrowserPath } from "./findBrowser";
 
 import type { Browser, Page } from "puppeteer";
@@ -1816,7 +1816,8 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
     },
     implementation: async ({ url }) => {
       try {
-        const response = await fetch(url);
+        // Browser UA cuts false 403s; timeout prevents a hanging page from stalling the turn.
+        const response = await fetch(url, { headers: WEB_FETCH_HEADERS, signal: AbortSignal.timeout(15000) });
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -1863,8 +1864,8 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
     },
     implementation: async ({ url, query }) => {
       try {
-        // 1. Fetch content
-        const response = await fetch(url);
+        // 1. Fetch content (browser UA cuts false 403s; timeout prevents a hanging page stalling the turn)
+        const response = await fetch(url, { headers: WEB_FETCH_HEADERS, signal: AbortSignal.timeout(15000) });
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -1879,7 +1880,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
           ],
         });
 
-        text = compiledConvert(text);
+        text = stripPageBoilerplate(compiledConvert(text));
 
         if (text.length === 0) {
           return { error: "Could not extract any text from the URL." };

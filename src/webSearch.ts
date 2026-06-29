@@ -2,6 +2,18 @@
 // query-normalization and boilerplate-stripping logic can be unit-tested without the SDK.
 
 /**
+ * Browser-like headers for content fetches. Many sites (e.g. SEI in a real run) return 403 to a
+ * header-less request — a default `fetch(url)` sends no User-Agent. Sending a realistic UA + Accept
+ * dramatically cuts those false failures.
+ */
+export const WEB_FETCH_HEADERS: Record<string, string> = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
+/**
  * Normalize the various ways the model asks for a web search into a deduped query list.
  *
  * gemma-4-12b-qat consistently wants to run MULTIPLE queries at once — sometimes as `query: [..]`,
