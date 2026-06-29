@@ -1,8 +1,10 @@
 import { text, tool, type Tool, type ToolsProvider, type LMStudioClient } from "@lmstudio/sdk";
 import { spawn } from "child_process";
 import { rm, writeFile, readdir, readFile, stat, mkdir, rename, copyFile, appendFile } from "fs/promises";
+import { existsSync } from "fs";
 import * as os from "os";
 import { join, resolve, dirname, isAbsolute, relative } from "path";
+import { findProjectRoot } from "./projectRoot";
 import { z } from "zod";
 import { pluginConfigSchematics } from "./config";
 import { findLMStudioHome } from "./findLMStudioHome";
@@ -138,6 +140,28 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
   // save_file (resolveActiveWorkflow). tddTestSeen flips once a test file is written or a test runs.
   let activeWorkflow: string | null = null;
   let tddTestSeen = false;
+
+  // Resolve a path for READ tools. A relative path stays sandboxed within the current workspace
+  // (validatePath). An ABSOLUTE path is allowed and AUTO-ROOTS the workspace at that path's project,
+  // so the model can then freely explore that project with relative paths — instead of being walled
+  // off to a single default workspace and having to fret about "outside the workspace". (Writes,
+  // e.g. save_file, stay sandboxed to the current workspace.)
+  const resolveReadPath = async (requestedPath: string): Promise<string> => {
+    if (isAbsolute(requestedPath)) {
+      const resolved = resolve(requestedPath);
+      let st;
+      try { st = await stat(resolved); } catch { throw new Error(`Path not found: ${requestedPath}`); }
+      const startDir = st.isDirectory() ? resolved : dirname(resolved);
+      const root = findProjectRoot(startDir, existsSync);
+      if (root !== currentWorkingDirectory) {
+        currentWorkingDirectory = root;
+        fullState.currentWorkingDirectory = root;
+        savePersistedState(fullState).catch(() => { /* best-effort */ });
+      }
+      return resolved;
+    }
+    return validatePath(currentWorkingDirectory, requestedPath);
+  };
 
   const allowAllCode = pluginConfig.get("allowAllCode");
   let allowJavascript = pluginConfig.get("allowJavascriptExecution");
@@ -520,7 +544,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
 
   const changeDirectoryTool = tool({
     name: "change_directory",
-    description: "Change the current working directory. Accepts absolute paths (e.g. 'C:\\Users\\Ziggity\\myproject') or relative paths. Use this FIRST before any file operation on a directory outside the current workspace — it unlocks access to that location for all subsequent file tools.",
+    description: "Switch the working directory to a project, then explore it freely with relative paths. Accepts absolute or relative paths. You usually DON'T need this — simply reading or listing an absolute path auto-roots the workspace at that path's project. Use it to set your starting project explicitly.",
     parameters: {
       directory: z.string().describe("Absolute path (e.g. C:\\Users\\Ziggity\\project) or relative path to navigate to."),
     },
@@ -948,14 +972,14 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       Returns matching file paths and line numbers.
     `,
     parameters: {
-      directory_path: z.string().optional().describe("Directory to search. Defaults to workspace root."),
+      directory_path: z.string().optional().describe("A relative subdirectory of the current project, or an absolute path to any folder. Defaults to the current project root."),
       pattern: z.string().describe("Regex pattern or string to search for"),
       use_regex: z.boolean().optional().default(false)
     },
     implementation: async ({ directory_path, pattern, use_regex }) => {
       try {
-        const targetDir = directory_path ? validatePath(currentWorkingDirectory, directory_path) : currentWorkingDirectory;
-        const regex = new RegExp(use_regex ? pattern : pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\  tools.push(replaceTextTool);'), 'g');
+        const targetDir = directory_path ? await resolveReadPath(directory_path) : currentWorkingDirectory;
+        const regex = new RegExp(use_regex ? pattern : pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
         const results: string[] = [];
         let searchedCount = 0;
         
@@ -1127,12 +1151,12 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
 
   const listDirectoryTool = tool({
     name: "list_directory",
-    description: "List the files and directories in the current working directory or a specified subdirectory. NOTE: Only paths within the current workspace are accessible. To access an absolute path outside the workspace, call change_directory first with that absolute path, then list_directory.",
+    description: "List the files and directories at a path. Pass a relative subdirectory of the current project, OR an ABSOLUTE path to any folder — giving an absolute path automatically roots the workspace at that path's project, so you can then freely explore the whole project (list subdirectories, read files) with ordinary relative paths. Tip: to understand a project the user points you to, list/read a path inside it, then explore for context — don't analyze a single file in isolation.",
     parameters: {
-      path: z.string().optional().describe("Relative subdirectory path. Defaults to current working directory. For absolute paths outside the workspace, use change_directory first."),
+      path: z.string().optional().describe("A relative subdirectory of the current project, or an absolute path to any folder. Defaults to the current working directory."),
     },
     implementation: async ({ path }) => {
-      const targetPath = path ? validatePath(currentWorkingDirectory, path) : currentWorkingDirectory;
+      const targetPath = path ? await resolveReadPath(path) : currentWorkingDirectory;
       const files = await readdir(targetPath);
       return {
         files,
@@ -1143,12 +1167,12 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
 
   const readFileTool = tool({
     name: "read_file",
-    description: "Read the content of a file in the current working directory.",
+    description: "Read a file's content. Accepts a relative path within the current project, OR an ABSOLUTE path to any file — reading an absolute path roots the workspace at that file's project so you can then explore the rest of it freely with relative paths.",
     parameters: {
-      file_name: z.string(),
+      file_name: z.string().describe("A relative path within the current project, or an absolute path to any file."),
     },
     implementation: async ({ file_name }) => {
-      const filePath = validatePath(currentWorkingDirectory, file_name);
+      const filePath = await resolveReadPath(file_name);
 
       const stats = await stat(filePath);
       if (stats.size > 10_000_000) {
