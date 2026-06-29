@@ -2548,7 +2548,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       async ({ query, lang = "en" }) => {
         try {
           const searchUrl = `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json`;
-          const searchResponse = await fetch(searchUrl);
+          const searchResponse = await fetch(searchUrl, { headers: WEB_FETCH_HEADERS });
           const searchData = await searchResponse.json();
 
           if (!searchData.query || !searchData.query.search || searchData.query.search.length === 0) {
@@ -2558,7 +2558,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
           const results = [];
           for (const item of searchData.query.search.slice(0, 3)) { // Top 3
             const pageUrl = `https://${lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&pageids=${item.pageid}&format=json`;
-            const pageResponse = await fetch(pageUrl);
+            const pageResponse = await fetch(pageUrl, { headers: WEB_FETCH_HEADERS });
             const pageData = await pageResponse.json();
             const page = pageData.query.pages[item.pageid];
 
@@ -3067,7 +3067,7 @@ Always assume relative paths are from this directory.`;
                       const wikiQuery = toolCall.args?.query ?? "";
                       try {
                         const searchUrl = `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(wikiQuery)}&format=json`;
-                        const searchResp = await fetch(searchUrl);
+                        const searchResp = await fetch(searchUrl, { headers: WEB_FETCH_HEADERS });
                         const searchData = await searchResp.json();
                         if (!searchData.query?.search?.length) {
                           toolResult = JSON.stringify({ results: "No Wikipedia articles found." });
@@ -3075,7 +3075,7 @@ Always assume relative paths are from this directory.`;
                           const wikiResults = [];
                           for (const item of searchData.query.search.slice(0, 3)) {
                             const pageUrl = `https://${lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&pageids=${item.pageid}&format=json`;
-                            const pageResp = await fetch(pageUrl);
+                            const pageResp = await fetch(pageUrl, { headers: WEB_FETCH_HEADERS });
                             const pageData = await pageResp.json();
                             const page = pageData.query.pages[item.pageid];
                             wikiResults.push({
