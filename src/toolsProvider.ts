@@ -1751,15 +1751,21 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         seenLinks.add(key);
         return true;
       });
+      // Cap the merged set: multi-query searches (N queries x ~10 hits) can balloon the tool result and
+      // bloat a 12B's context — which itself makes the model lose the thread. Keep the top results;
+      // report the true total so the model knows more existed.
+      const MAX_RESULTS = 12;
+      const returnedResults = dedupedResults.slice(0, MAX_RESULTS);
 
       return {
-        results: dedupedResults,
+        results: returnedResults,
         // Fetch-before-answer guardrail (D3): push the model to read a source instead of answering
         // from snippets. Deterministic, attached to the search result itself.
         directive: webSearchFetchDirective(),
         meta: {
           total_found: dedupedResults.length,
-          providers_used: [...new Set(dedupedResults.map(r => r.provider))],
+          returned: returnedResults.length,
+          providers_used: [...new Set(returnedResults.map(r => r.provider))],
           no_api_key_required: true,
           trace: logs,
         },
