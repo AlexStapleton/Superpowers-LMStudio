@@ -74,6 +74,20 @@ export function checkDelegated(toolCalls: ToolCall[]): CheckResult {
   return { name: "delegated", pass, soft: true, detail: pass ? undefined : "no consult_secondary_agent / dispatch_parallel_agents call" };
 }
 
+// Did the agent READ a source (fetch_web_content / rag_web_content) instead of answering from search
+// snippets? Soft signal for the research workflow — exactly what the web_search fetch-before-answer
+// directive (D3) pushes. Locks that behavior against regression once the eval stubs let it search.
+export function checkFetchedSources(toolCalls: ToolCall[]): CheckResult {
+  const searched = toolCalls.some(c => c.name === "web_search" || c.name === "wikipedia_search");
+  const fetched = toolCalls.some(c => c.name === "fetch_web_content" || c.name === "rag_web_content");
+  const detail = fetched
+    ? undefined
+    : searched
+      ? "searched but answered from snippets (no fetch_web_content/rag_web_content)"
+      : "no source fetched before answering";
+  return { name: "fetchedSources", pass: fetched, soft: true, detail };
+}
+
 // Realistic mode: did the workflow load by EITHER path — the code router matching the prompt, or the
 // model calling use_workflow? This is the metric that reflects the actual hybrid plugin.
 export function checkWorkflowLoaded(
@@ -149,6 +163,7 @@ export function scoreCase(
           : checkAnnounce(traj.finalText, c.announce);
       case "toolInvoked": return checkToolInvoked(traj.toolCalls, c.workflow);
       case "delegated": return checkDelegated(traj.toolCalls);
+      case "fetchedSources": return checkFetchedSources(traj.toolCalls);
       case "workflowLoaded": return checkWorkflowLoaded(traj.toolCalls, c.workflow, opts.routerMatched);
       case "noWorkflow": return checkNoWorkflow(traj.toolCalls, traj.finalText);
       case "firstStep": return checkFirstStep(c.workflow, traj.finalText);

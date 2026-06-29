@@ -64,7 +64,7 @@ async function main() {
   const skillByName = new Map(skills.map(s => [s.name, s]));
 
   // R3: fail loudly on bad case config so a typo can't silently skip coverage.
-  const KNOWN_CHECKS = new Set(["announce", "toolInvoked", "workflowLoaded", "noWorkflow", "firstStep", "adherence", "delegated"]);
+  const KNOWN_CHECKS = new Set(["announce", "toolInvoked", "workflowLoaded", "noWorkflow", "firstStep", "adherence", "delegated", "fetchedSources"]);
   let configIssues = 0;
   for (const c of CASES) {
     if (c.workflow && !skillByName.has(c.workflow)) { console.log(`  [config] case ${c.id}: unknown workflow '${c.workflow}'`); configIssues++; }

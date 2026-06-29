@@ -2,8 +2,20 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   checkAnnounce, checkToolInvoked, checkNoWorkflow, checkFirstStep, scoreCase, summarize,
-  summarizeRouting, checkDelegated,
+  summarizeRouting, checkDelegated, checkFetchedSources,
 } = require("../dist/evalAnalysis.js");
+
+test("checkFetchedSources: passes only when a source was read, not answered from snippets", () => {
+  // fetched → pass
+  assert.equal(checkFetchedSources([{ name: "web_search" }, { name: "fetch_web_content" }]).pass, true);
+  assert.equal(checkFetchedSources([{ name: "rag_web_content" }]).pass, true);
+  // searched but never fetched → the failure the D3 directive targets
+  const snippetOnly = checkFetchedSources([{ name: "web_search" }]);
+  assert.equal(snippetOnly.pass, false);
+  assert.match(snippetOnly.detail, /snippets/);
+  // soft so it never gates hardPass
+  assert.equal(checkFetchedSources([]).soft, true);
+});
 
 test("checkDelegated detects either delegation tool (soft signal)", () => {
   assert.equal(checkDelegated([{ name: "consult_secondary_agent", args: { task: "x" } }]).pass, true);

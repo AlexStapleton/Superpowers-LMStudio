@@ -1,6 +1,6 @@
 // Minimal OpenAI-compatible client for the behavioral eval (B1). No deps — Node 18+ fetch.
 const { buildWorkflowToolResult } = require("../dist/skills.js");
-const { isTestFile, evaluateGuardrail } = require("../dist/guardrails.js");
+const { isTestFile, evaluateGuardrail, webSearchFetchDirective } = require("../dist/guardrails.js");
 
 // LM Studio servers can require a Bearer token. Set EVAL_API_KEY (or OPENAI_API_KEY) to send it.
 const API_KEY = process.env.EVAL_API_KEY || process.env.OPENAI_API_KEY || "";
@@ -88,6 +88,9 @@ const STUB_TOOLS = [
   { type: "function", function: { name: "list_directory", description: "List files in the project.", parameters: { type: "object", properties: { path: { type: "string" } }, required: [] } } },
   { type: "function", function: { name: "read_file", description: "Read a file's contents.", parameters: { type: "object", properties: { file_name: { type: "string" } }, required: ["file_name"] } } },
   { type: "function", function: { name: "search_directory", description: "Search files for a pattern.", parameters: { type: "object", properties: { pattern: { type: "string" } }, required: ["pattern"] } } },
+  { type: "function", function: { name: "web_search", description: "Search the web. Provide one query or several (array in `query`, or via `queries`).", parameters: { type: "object", properties: { query: { description: "a query, or an array of queries" }, queries: { type: "array", items: { type: "string" } } }, required: [] } } },
+  { type: "function", function: { name: "fetch_web_content", description: "Fetch the text content of a webpage URL.", parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] } } },
+  { type: "function", function: { name: "rag_web_content", description: "Fetch a URL and return only the chunks most relevant to a query.", parameters: { type: "object", properties: { url: { type: "string" }, query: { type: "string" } }, required: ["url", "query"] } } },
   { type: "function", function: { name: "consult_secondary_agent", description: "Delegate a self-contained task to a sub-agent. It has NO access to this conversation — include everything it needs. Implementer sub-agents save files automatically; verify the result yourself afterward.", parameters: { type: "object", properties: { task: { type: "string" }, agent_role: { type: "string" }, context: { type: "string" }, allow_tools: { type: "boolean" } }, required: ["task"] } } },
   { type: "function", function: { name: "dispatch_parallel_agents", description: "Dispatch 2-8 INDEPENDENT tasks to sub-agents running in parallel (no shared state). Each task is self-contained — the agent has no conversation history. Results are collected.", parameters: { type: "object", properties: { tasks: { type: "array", items: { type: "object", properties: { task: { type: "string" }, agent_role: { type: "string" }, context: { type: "string" }, allow_tools: { type: "boolean" } }, required: ["task"] } } }, required: ["tasks"] } } },
 ];
@@ -178,6 +181,27 @@ function makeStubExecutor(skills, opts = {}) {
       if (g.block) return JSON.stringify({ blocked: true, error: g.warning });
       if (fileName) sandbox[fileName] = args.content || "";
       return JSON.stringify(g.warning ? { ok: true, warning: g.warning } : { ok: true });
+    }
+    // Web research stubs (B8 fidelity): canned but realistic so the research workflow can actually
+    // search → read → cite, and the fetchedSources check measures real fetch-before-answer behavior.
+    // web_search carries the SAME directive as the real tool so the eval mirrors production.
+    if (name === "web_search") {
+      return JSON.stringify({
+        results: [
+          { title: "Authoritative 2026 report on the topic", link: "https://example.org/report-2026", snippet: "Key finding and figures relevant to the query." },
+          { title: "Secondary analysis", link: "https://example.com/analysis-2026", snippet: "Additional context, data points, and caveats." },
+        ],
+        directive: webSearchFetchDirective(),
+        meta: { total_found: 2, no_api_key_required: true },
+      });
+    }
+    if (name === "fetch_web_content") {
+      const url = args.url || "https://example.org/report-2026";
+      return JSON.stringify({ url, status: 200, title: "Report 2026", content: "Detailed page content with specific data points, figures, and dated conclusions relevant to the user's question. (canned eval content)" });
+    }
+    if (name === "rag_web_content") {
+      const url = args.url || "https://example.org/report-2026";
+      return JSON.stringify({ url, query: args.query || "", relevant_chunks: [{ chunk: "A specific, dated, relevant fact extracted from the page.", score: 0.84 }] });
     }
     return JSON.stringify({ ok: true });
   };
