@@ -71,7 +71,7 @@ export const en: LocaleDict = {
     },
     protectedPaths: {
       displayName: "Protected Paths",
-      subtitle: "List of drives or paths to block all file/shell operations on (e.g. D:\\, C:\\Windows). One per line. Shell commands cannot be fully blocked by path matching — use this as a safeguard, not a security boundary.",
+      subtitle: "Glob patterns the model may NOT read, write, or search (e.g. **/secret*, D:\\private\\**). One per line or comma-separated. These ADD to built-in defaults that already block credentials/secrets (.ssh, .env*, *.pem/*.key, .aws, etc.). Note: shell/terminal commands are not path-matched — this gates the file tools, not arbitrary shell.",
     },
 
     searchApiKey: {

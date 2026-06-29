@@ -5,6 +5,8 @@ import { existsSync } from "fs";
 import * as os from "os";
 import { join, resolve, dirname, isAbsolute, relative } from "path";
 import { findProjectRoot } from "./projectRoot";
+import { buildProtectedGlobs, isProtectedPath } from "./protectedPaths";
+import { matchGlob } from "./glob";
 import { z } from "zod";
 import { pluginConfigSchematics } from "./config";
 import { findLMStudioHome } from "./findLMStudioHome";
@@ -141,26 +143,44 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
   let activeWorkflow: string | null = null;
   let tddTestSeen = false;
 
-  // Resolve a path for READ tools. A relative path stays sandboxed within the current workspace
-  // (validatePath). An ABSOLUTE path is allowed and AUTO-ROOTS the workspace at that path's project,
-  // so the model can then freely explore that project with relative paths — instead of being walled
-  // off to a single default workspace and having to fret about "outside the workspace". (Writes,
-  // e.g. save_file, stay sandboxed to the current workspace.)
+  // Code-enforced deny-list (Phase 1) — the security boundary that replaces the old path-sandbox.
+  // An untrusted small model can't be relied on to avoid secrets, so we BLOCK protected paths in code.
+  const protectedGlobs = buildProtectedGlobs(pluginConfig.get("protectedPaths"));
+  const assertNotProtected = (resolved: string) => {
+    if (isProtectedPath(resolved, protectedGlobs)) {
+      throw new Error(`Access blocked: '${resolved}' is a protected path (credentials/secrets). Adjust 'Protected Paths' in settings to change this.`);
+    }
+  };
+
+  // Whether the session's working project has been set yet (Phase 2). Reads NEVER move the write-root;
+  // we auto-root the workspace only ONCE, on the first absolute file reference while still on the
+  // untouched default — then stop, so a later cross-project peek-read can't silently relocate writes.
+  let workspaceEstablished = false;
+
+  // Resolve a path for READ tools. A relative path resolves within the current workspace. An ABSOLUTE
+  // path is allowed (subject to the deny-list) so the model can read/explore any project it's pointed
+  // at. The first absolute reference establishes the working project; subsequent ones do not move it.
   const resolveReadPath = async (requestedPath: string): Promise<string> => {
     if (isAbsolute(requestedPath)) {
       const resolved = resolve(requestedPath);
+      assertNotProtected(resolved);
       let st;
       try { st = await stat(resolved); } catch { throw new Error(`Path not found: ${requestedPath}`); }
-      const startDir = st.isDirectory() ? resolved : dirname(resolved);
-      const root = findProjectRoot(startDir, existsSync);
-      if (root !== currentWorkingDirectory) {
-        currentWorkingDirectory = root;
-        fullState.currentWorkingDirectory = root;
-        savePersistedState(fullState).catch(() => { /* best-effort */ });
+      if (!workspaceEstablished) {
+        const startDir = st.isDirectory() ? resolved : dirname(resolved);
+        const root = findProjectRoot(startDir, existsSync);
+        workspaceEstablished = true;
+        if (root !== currentWorkingDirectory) {
+          currentWorkingDirectory = root;
+          fullState.currentWorkingDirectory = root;
+          savePersistedState(fullState).catch(() => { /* best-effort */ });
+        }
       }
       return resolved;
     }
-    return validatePath(currentWorkingDirectory, requestedPath);
+    const resolved = validatePath(currentWorkingDirectory, requestedPath);
+    assertNotProtected(resolved);
+    return resolved;
   };
 
   const allowAllCode = pluginConfig.get("allowAllCode");
@@ -555,6 +575,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         throw new Error(`Path is not a directory: ${newPath}`);
       }
       currentWorkingDirectory = newPath;
+      workspaceEstablished = true; // explicit set — subsequent reads won't auto-relocate the write-root
       // Persist the new state
       fullState.currentWorkingDirectory = currentWorkingDirectory;
       await savePersistedState(fullState);
@@ -845,6 +866,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
 
         try {
           const filePath = validatePath(currentWorkingDirectory, file.file_name);
+          assertNotProtected(filePath);
           await mkdir(dirname(filePath), { recursive: true });
           await writeFile(filePath, file.content, "utf-8");
           savedPaths.push(filePath);
@@ -887,6 +909,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         }
 
         const filePath = validatePath(currentWorkingDirectory, file_name);
+        assertNotProtected(filePath);
         const content = await readFile(filePath, "utf-8");
 
         if (!content.includes(old_string)) {
@@ -928,6 +951,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
     implementation: async ({ file_name, replacements }) => {
       try {
         const filePath = validatePath(currentWorkingDirectory, file_name);
+        assertNotProtected(filePath);
         const content = await readFile(filePath, "utf-8");
         let lines = content.split("\n");
         let errors = [];
@@ -1903,41 +1927,42 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
 
   const findFilesTool = tool({
     name: "find_files",
-    description: "Find files recursively by matching a SUBSTRING of the filename (case-insensitive). For example, pattern 'config' matches 'app.config.ts', 'config.json', 'myconfig.py'. This is NOT glob pattern matching — use plain substrings or partial names.",
+    description: "Find files by name within a directory tree — use this to map a project's structure fast before reading. Accepts a GLOB ('*.ts', '**/router*', 'eval/*.js') OR a plain filename SUBSTRING ('config' → app.config.ts). Searches a relative subdir or an absolute path.",
     parameters: {
-      pattern: z.string().describe("Substring to match in filename (case-insensitive)"),
-      max_depth: z.number().optional().describe("Maximum depth to search (default: 5)"),
+      pattern: z.string().describe("Glob (`*` within a segment, `**` across dirs, `?` one char) matched against each file's relative path AND name; a pattern with no glob chars is treated as a case-insensitive filename substring."),
+      directory_path: z.string().optional().describe("A relative subdirectory or an absolute path. Defaults to the current project root."),
+      max_depth: z.number().optional().describe("Maximum directory depth to search (default: 6)"),
     },
-    implementation: async ({ pattern, max_depth }) => {
-      const depthLimit = max_depth ?? 5;
-      const foundFiles: string[] = [];
-      const lowerPattern = pattern.toLowerCase();
+    implementation: async ({ pattern, directory_path, max_depth }) => {
+      const depthLimit = max_depth ?? 6;
+      const rootDir = directory_path ? await resolveReadPath(directory_path) : currentWorkingDirectory;
+      const isGlob = /[*?]/.test(pattern);
+      const lower = pattern.toLowerCase();
+      const found: string[] = [];
 
-      async function scan(dir: string, currentDepth: number) {
-        if (currentDepth > depthLimit) return;
-        try {
-          const entries = await readdir(dir, { withFileTypes: true });
-          for (const entry of entries) {
-            if (['node_modules', '.git', 'dist', '.lmstudio'].includes(entry.name)) continue;
-            const fullPath = join(dir, entry.name);
-            if (entry.isDirectory()) {
-              await scan(fullPath, currentDepth + 1);
-            } else if (entry.isFile()) {
-              if (entry.name.toLowerCase().includes(lowerPattern)) {
-                foundFiles.push(fullPath);
-              }
-            }
+      const scan = async (dir: string, depth: number) => {
+        if (depth > depthLimit || found.length >= 200) return;
+        let entries;
+        try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+        for (const entry of entries) {
+          if (found.length >= 200) return;
+          if (["node_modules", ".git", "dist", ".lmstudio"].includes(entry.name)) continue;
+          const fullPath = join(dir, entry.name);
+          if (isProtectedPath(fullPath, protectedGlobs)) continue;
+          if (entry.isDirectory()) {
+            await scan(fullPath, depth + 1);
+          } else if (entry.isFile()) {
+            const rel = relative(rootDir, fullPath).split("\\").join("/");
+            const hit = isGlob
+              ? (matchGlob(rel, pattern) || matchGlob(entry.name, pattern))
+              : (entry.name.toLowerCase().includes(lower) || matchGlob(rel, pattern));
+            if (hit) found.push(rel);
           }
-        } catch (e) {
-          // Ignore access errors
         }
-      }
-
-      await scan(currentWorkingDirectory, 0);
-      return {
-        found_files: foundFiles.slice(0, 100), // Limit results
-        count: foundFiles.length,
       };
+
+      await scan(rootDir, 0);
+      return { directory: rootDir, count: found.length, files: found.slice(0, 200), truncated: found.length >= 200 };
     },
   });
   tools.push(findFilesTool);
@@ -2141,6 +2166,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
     implementation: async ({ html_content, file_name }) => {
       const name = file_name || `preview_${Date.now()}.html`;
       const filePath = validatePath(currentWorkingDirectory, name);
+      assertNotProtected(filePath);
       await writeFile(filePath, html_content, "utf-8");
 
       // Open it
@@ -3568,6 +3594,7 @@ Always assume relative paths are from this directory.`;
     implementation: async ({ file_name, line_number, content_to_insert }) => {
       try {
         const filePath = validatePath(currentWorkingDirectory, file_name);
+        assertNotProtected(filePath);
         let content = "";
         try {
           content = await readFile(filePath, "utf-8");
@@ -3608,6 +3635,7 @@ Always assume relative paths are from this directory.`;
     implementation: async ({ file_name, content }) => {
       try {
         const filePath = validatePath(currentWorkingDirectory, file_name);
+        assertNotProtected(filePath);
         await mkdir(dirname(filePath), { recursive: true });
         await appendFile(filePath, content, "utf-8");
         return { 
@@ -3637,6 +3665,7 @@ Always assume relative paths are from this directory.`;
     implementation: async ({ file_name, start_line, end_line }) => {
       try {
         const filePath = validatePath(currentWorkingDirectory, file_name);
+        assertNotProtected(filePath);
         const content = await readFile(filePath, "utf-8");
         const lines = content.split("\n");
         
@@ -3682,6 +3711,7 @@ Always assume relative paths are from this directory.`;
     implementation: async ({ file_name, pattern, case_sensitive = false, use_regex = false }) => {
       try {
         const filePath = validatePath(currentWorkingDirectory, file_name);
+        assertNotProtected(filePath);
         const content = await readFile(filePath, "utf-8");
         const lines = content.split("\n");
         
@@ -3746,6 +3776,7 @@ Always assume relative paths are from this directory.`;
     implementation: async ({ file_name, start_line, end_line }) => {
       try {
         const filePath = validatePath(currentWorkingDirectory, file_name);
+        assertNotProtected(filePath);
         let content = "";
         try {
           content = await readFile(filePath, "utf-8");
