@@ -21,6 +21,7 @@ import { loadSkillsCached, getSkillsDirCandidates, buildWorkflowToolResult } fro
 import { appendRoutingEvent } from "./routingLog";
 import { isTestFile, evaluateGuardrail, resolveActiveWorkflow, webSearchFetchDirective, type TddGuardrailMode } from "./guardrails";
 import { normalizeSearchQueries, stripPageBoilerplate, isTextualContentType, WEB_FETCH_HEADERS } from "./webSearch";
+import { coerceFileName, coerceFileContent } from "./toolArgs";
 import { findSystemBrowserPath } from "./findBrowser";
 
 import type { Browser, Page } from "puppeteer";
@@ -815,12 +816,19 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
     parameters: {
       file_name: z.string().optional(),
       content: z.string().optional(),
+      path: z.string().optional().describe("Alias of file_name."),
+      name: z.string().optional().describe("Alias of file_name."),
+      data: z.string().optional().describe("Alias of content."),
       files: z.array(z.object({ file_name: z.string(), content: z.string() })).optional().describe("For saving multiple files at once. E.g. [{file_name: 'a.txt', content: 'hello'}]"),
     },
-    implementation: async ({ file_name, content, files }) => {
+    implementation: async (args) => {
+      const { files } = args;
+      const file_name = coerceFileName(args);
+      const content = coerceFileContent(args);
 
       const filesToSave = Array.isArray(files) ? files : [];
-      if (file_name && content) {
+      // content !== undefined (not truthiness) so an intentionally empty file still saves.
+      if (file_name && content !== undefined) {
         filesToSave.push({ file_name, content });
       }
 
@@ -898,13 +906,19 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       Ensure 'old_string' matches exactly (including whitespace) or the replace will fail.
     `,
     parameters: {
-      file_name: z.string(),
+      file_name: z.string().optional(),
+      path: z.string().optional().describe("Alias of file_name."),
+      name: z.string().optional().describe("Alias of file_name."),
       old_string: z.string().describe("The exact text to replace. Must be unique in the file."),
       new_string: z.string().describe("The text to insert in place of old_string."),
     },
-    implementation: async ({ file_name, old_string, new_string }) => {
+    implementation: async (args) => {
+      const { old_string, new_string } = args;
+      const file_name = coerceFileName(args);
       try {
-
+        if (!file_name) {
+          return { error: "replace_text_in_file requires 'file_name'." };
+        }
         if (!old_string || old_string.length === 0) {
           return { error: "old_string cannot be empty" };
         }
@@ -941,7 +955,9 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       The old_string must perfectly match what is currently in the file.
     `,
     parameters: {
-      file_name: z.string(),
+      file_name: z.string().optional(),
+      path: z.string().optional().describe("Alias of file_name."),
+      name: z.string().optional().describe("Alias of file_name."),
       replacements: z.array(z.object({
         start_line: z.number().int().min(1),
         end_line: z.number().int().min(1),
@@ -949,8 +965,13 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         new_string: z.string()
       })).describe("Array of replacements to make in the file")
     },
-    implementation: async ({ file_name, replacements }) => {
+    implementation: async (args) => {
+      const { replacements } = args;
+      const file_name = coerceFileName(args);
       try {
+        if (!file_name) {
+          return { error: "multi_replace_text requires 'file_name'." };
+        }
         const filePath = validatePath(currentWorkingDirectory, file_name);
         assertNotProtected(filePath);
         const content = await readFile(filePath, "utf-8");
@@ -1194,9 +1215,15 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
     name: "read_file",
     description: "Read a file's content. Accepts a relative path within the current project, OR an ABSOLUTE path to any file — reading an absolute path roots the workspace at that file's project so you can then explore the rest of it freely with relative paths.",
     parameters: {
-      file_name: z.string().describe("A relative path within the current project, or an absolute path to any file."),
+      file_name: z.string().optional().describe("A relative path within the current project, or an absolute path to any file."),
+      path: z.string().optional().describe("Alias of file_name."),
+      name: z.string().optional().describe("Alias of file_name."),
     },
-    implementation: async ({ file_name }) => {
+    implementation: async (args) => {
+      const file_name = coerceFileName(args);
+      if (!file_name) {
+        return { error: "read_file requires a file path. Provide 'file_name' (relative or absolute)." };
+      }
       const filePath = await resolveReadPath(file_name);
 
       const stats = await stat(filePath);
