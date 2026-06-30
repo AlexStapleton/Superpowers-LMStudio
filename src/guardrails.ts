@@ -36,20 +36,57 @@ export function resolveActiveWorkflow(routerInjected: string | null, toolInvoked
   return routerInjected ?? toolInvoked;
 }
 
-export function evaluateTddGuardrail(opts: {
+export interface GuardrailOpts {
   active: string | null;
   testSeen: boolean;
   fileName: string;
   mode: TddGuardrailMode;
-}): { block: boolean; warning: string | null } {
-  const { active, testSeen, fileName, mode } = opts;
-  if (mode === "off" || active !== "tdd" || testSeen || !isSourceCodeFile(fileName)) {
-    return { block: false, warning: null };
-  }
-  const warning =
-    `TDD is active and no test has been written or run yet. Per the Iron Law — no production code ` +
-    `without a failing test first — write a failing test before creating source file '${fileName}'.`;
-  return mode === "block" ? { block: true, warning } : { block: false, warning };
+}
+
+/**
+ * Declarative workflow step-gates (B). Each row is one workflow's critical ordering invariant,
+ * expressed as: "given this file write, is it out of order?" → a violation message, else null. This is
+ * the deterministic mechanism for keeping the model's logical steps correct. NOTE the ceiling: the only
+ * invariants enforceable in-plugin are ones gateable on a TOOL CALL — a free-text final answer has no
+ * hook (that's why research's fetch-before-answer is a directive, not a row here). Add a row to extend;
+ * `mode` ("warn"|"block") decides whether a violation nudges or hard-stops.
+ */
+// `advisory` gates only ever WARN (never hard-block), even in "block" mode — for invariants where a
+// violation is usually-but-not-always wrong (e.g. a debug log edit before reproducing is legitimate).
+const WORKFLOW_GATES: Array<{ workflow: string; advisory?: boolean; violation: (o: GuardrailOpts) => string | null }> = [
+  {
+    workflow: "tdd",
+    violation: ({ testSeen, fileName }) =>
+      !testSeen && isSourceCodeFile(fileName)
+        ? `TDD is active and no test has been written or run yet. Per the Iron Law — no production code ` +
+          `without a failing test first — write a failing test before creating source file '${fileName}'.`
+        : null,
+  },
+  {
+    workflow: "brainstorming",
+    violation: ({ fileName }) =>
+      isSourceCodeFile(fileName)
+        ? `Brainstorming is a DESIGN phase — do not write source code ('${fileName}') before the design ` +
+          `is approved. Capture the design in a doc (e.g. docs/superpowers/specs/...md) and get sign-off first.`
+        : null,
+  },
+  {
+    // Advisory: reproduce-first is the Iron Law, but an investigative edit (adding a log line) before
+    // running tests is legitimate — so nudge, never block, even when the global mode is "block".
+    workflow: "debugging",
+    advisory: true,
+    violation: ({ testSeen, fileName }) =>
+      !testSeen && isSourceCodeFile(fileName)
+        ? `Systematic Debugging is active but no test has been run yet. Reproduce the bug first ` +
+          `(run_test_command) before editing source ('${fileName}') — fixing before reproducing is guessing.`
+        : null,
+  },
+];
+
+// Back-compat: the TDD gate on its own (still imported + tested directly). Delegates to the table.
+export function evaluateTddGuardrail(opts: GuardrailOpts): { block: boolean; warning: string | null } {
+  if (opts.active !== "tdd") return { block: false, warning: null };
+  return evaluateGuardrail(opts);
 }
 
 /**
@@ -72,23 +109,15 @@ export function webSearchFetchDirective(): string {
 }
 
 /**
- * General workflow code-gate (DoD2): dispatches by active workflow.
- *  - tdd: no production code before a test (see evaluateTddGuardrail).
- *  - brainstorming: no source code at all — it's a DESIGN phase; design docs (.md) are fine.
+ * General workflow code-gate (B): consults the declarative WORKFLOW_GATES table. Returns a hard block
+ * (mode "block") or a non-blocking warning (mode "warn") when the active workflow's ordering invariant
+ * is violated by this file write; otherwise a no-op.
  */
-export function evaluateGuardrail(opts: {
-  active: string | null;
-  testSeen: boolean;
-  fileName: string;
-  mode: TddGuardrailMode;
-}): { block: boolean; warning: string | null } {
+export function evaluateGuardrail(opts: GuardrailOpts): { block: boolean; warning: string | null } {
   if (opts.mode === "off") return { block: false, warning: null };
-  if (opts.active === "tdd") return evaluateTddGuardrail(opts);
-  if (opts.active === "brainstorming" && isSourceCodeFile(opts.fileName)) {
-    const warning =
-      `Brainstorming is a DESIGN phase — do not write source code ('${opts.fileName}') before the design ` +
-      `is approved. Capture the design in a doc (e.g. docs/superpowers/specs/...md) and get sign-off first.`;
-    return opts.mode === "block" ? { block: true, warning } : { block: false, warning };
-  }
-  return { block: false, warning: null };
+  const gate = WORKFLOW_GATES.find(g => g.workflow === opts.active);
+  const warning = gate ? gate.violation(opts) : null;
+  if (!warning) return { block: false, warning: null };
+  const block = opts.mode === "block" && !gate!.advisory;
+  return block ? { block: true, warning } : { block: false, warning };
 }

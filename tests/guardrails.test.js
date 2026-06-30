@@ -22,6 +22,29 @@ test("resolveActiveWorkflow: router injection wins; tool invoke is the fallback 
   assert.equal(resolveActiveWorkflow(null, null), null);
 });
 
+// Step-gate framework (B): debugging requires a reproduction (run_test_command sets testSeen) before
+// editing source — "fix before reproduce is guessing".
+test("debugging gate is ADVISORY: warns on source-before-reproduction but never blocks", () => {
+  const base = { active: "debugging", fileName: "src/app.ts" };
+  // no test run yet → warn (non-blocking) in warn mode
+  const warn = evaluateGuardrail({ ...base, testSeen: false, mode: "warn" });
+  assert.equal(warn.block, false);
+  assert.match(warn.warning, /[Rr]eproduce/);
+  // even in block mode it only warns (advisory) — an investigative edit is legitimate
+  const blockMode = evaluateGuardrail({ ...base, testSeen: false, mode: "block" });
+  assert.equal(blockMode.block, false);
+  assert.match(blockMode.warning, /[Rr]eproduce/);
+  // a reproduction ran → no gate
+  assert.equal(evaluateGuardrail({ ...base, testSeen: true, mode: "block" }).warning, null);
+  // editing a non-source file (e.g. notes) is never gated
+  assert.equal(evaluateGuardrail({ active: "debugging", fileName: "NOTES.md", testSeen: false, mode: "block" }).warning, null);
+});
+
+test("evaluateGuardrail: a workflow with no gate row is a no-op", () => {
+  assert.equal(evaluateGuardrail({ active: "research", fileName: "src/x.ts", testSeen: false, mode: "block" }).block, false);
+  assert.equal(evaluateGuardrail({ active: null, fileName: "src/x.ts", testSeen: false, mode: "block" }).block, false);
+});
+
 // Regression guard for the disconnect bug: a router-injected tdd must block source-before-test even
 // though no use_workflow tool call happened (activeWorkflow would be null).
 test("router-injected tdd blocks source-before-test with no use_workflow call", () => {
@@ -39,7 +62,10 @@ test("evaluateGuardrail dispatches: tdd test-first AND brainstorming no-source-c
   // warn never blocks; off never fires; unrelated workflow no-op
   assert.equal(evaluateGuardrail({ active: "brainstorming", testSeen: false, fileName: "app.ts", mode: "warn" }).block, false);
   assert.match(evaluateGuardrail({ active: "brainstorming", testSeen: false, fileName: "app.ts", mode: "warn" }).warning, /design/i);
-  assert.equal(evaluateGuardrail({ active: "debugging", testSeen: false, fileName: "app.ts", mode: "block" }).block, false);
+  // debugging now HAS a gate (B) but it's ADVISORY: warns, never blocks (see dedicated test above)
+  const dbg = evaluateGuardrail({ active: "debugging", testSeen: false, fileName: "app.ts", mode: "block" });
+  assert.equal(dbg.block, false);
+  assert.match(dbg.warning, /[Rr]eproduce/);
 });
 
 test("isTestFile recognizes common test naming", () => {
