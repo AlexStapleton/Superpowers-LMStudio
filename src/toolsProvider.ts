@@ -708,40 +708,118 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
   });
   tools.push(setProjectDirectoryTool);
 
-  const saveMemoryTool = tool({
-    name: "save_memory",
+  // Pick the id of the most-similar existing memory via embeddings; null if none clears the threshold or
+  // the embedder is unavailable (caller then falls back to stringSimilarityMatch). Reuses cosineSimilarity.
+  const findMemoryMatch = async (fact: string, entries: MemoryEntry[]): Promise<string | null> => {
+    if (entries.length === 0) return null;
+    try {
+      const model = await client.embedding.model(embeddingModelName);
+      const [q] = await model.embed([fact]);
+      const embs = await model.embed(entries.map(e => e.fact));
+      let best = { id: "", score: -1 };
+      embs.forEach((emb, idx) => {
+        const score = cosineSimilarity(q.embedding, emb.embedding);
+        if (score > best.score) best = { id: entries[idx].id, score };
+      });
+      return best.score >= memoryDedupeThreshold ? best.id : null;
+    } catch {
+      return stringSimilarityMatch(fact, entries);
+    }
+  };
+
+  const todayStamp = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+
+  const memoryTypeEnum = z.enum(["user", "preference", "project", "reference"]);
+
+  const rememberImpl = async (args: Record<string, any>) => {
+    if (!enableMemory) {
+      return { error: "Memory is currently disabled in the plugin settings. Please ask the user to enable it." };
+    }
+    await refreshState();
+    const fact = (args.fact ?? args.memory ?? args.text ?? args.content ?? args.note);
+    if (typeof fact !== "string" || fact.trim().length === 0) {
+      return { error: "Provide a non-empty 'fact' to remember." };
+    }
+    const type = memoryTypeEnum.safeParse(args.type).success ? args.type : "user";
+    const memoryPath = resolveMemoryPath(memoryScope, projectDirectory, toolboxHome);
+    let parsed = { preamble: "", entries: [] as MemoryEntry[] };
+    try { parsed = parseMemory(await readFile(memoryPath, "utf-8")); } catch { /* missing file = empty */ }
+
+    const matchId = await findMemoryMatch(fact, parsed.entries);
+    const { next, action } = upsertMemory(parsed, { fact, type, date: todayStamp(), matchId: matchId ?? undefined });
+
+    try {
+      await mkdir(dirname(memoryPath), { recursive: true });
+      await writeFile(memoryPath, serializeMemory(next), "utf-8");
+    } catch (e) {
+      return { error: `Failed to write memory: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    const count = next.entries.length;
+    const warning = count > memoryMaxEntries
+      ? `Memory now holds ${count} entries (soft cap ${memoryMaxEntries}). Consider reviewing/pruning ${memoryPath}; the oldest entries are "${next.entries.slice(0, 3).map(e => e.title).join('", "')}".`
+      : undefined;
+    return { success: true, action, count, memory_path: memoryPath, warning };
+  };
+
+  const rememberTool = tool({
+    name: "remember",
     description: text`
-      Save a specific piece of information or fact to long-term memory.
-      This information will be available in future interactions if memory is enabled.
-      Use this for user preferences, important facts, or context that should persist.
+      Save a fact to long-term memory so it persists across conversations. Use for user preferences,
+      durable project facts, and context worth keeping. Provide 'fact'; optionally 'type'
+      (user | preference | project | reference). Near-duplicates UPDATE the existing memory instead of piling up.
     `,
     parameters: {
-      fact: z.string().describe("The specific fact or piece of information to remember."),
+      fact: z.string().describe("The fact to remember."),
+      type: memoryTypeEnum.optional().describe("user | preference | project | reference. Default user."),
+      memory: z.string().optional().describe("Alias of fact."),
+      text: z.string().optional().describe("Alias of fact."),
+      content: z.string().optional().describe("Alias of fact."),
+      note: z.string().optional().describe("Alias of fact."),
     },
-    implementation: async ({ fact }) => {
-      if (!enableMemory) {
-        return { error: "Memory is currently disabled in the plugin settings. Please ask the user to enable it." };
-      }
+    implementation: rememberImpl,
+  });
+  tools.push(rememberTool);
 
-      const memoryFile = join(currentWorkingDirectory, "memory.md");
-      const timestamp = new Date().toISOString();
-      const entry = `\n- [${timestamp}] ${fact}`;
-
-      try {
-        await appendFile(memoryFile, entry, "utf-8");
-        return { success: true, message: "Fact saved to memory." };
-      } catch (error) {
-        // If append fails (e.g. file doesn't exist), try writing
-        try {
-          await writeFile(memoryFile, "# Long-Term Memory\n" + entry, "utf-8");
-          return { success: true, message: "Fact saved to memory (new file created)." };
-        } catch (writeError) {
-          return { error: `Failed to save memory: ${writeError instanceof Error ? writeError.message : String(writeError)}` };
-        }
-      }
+  // Back-compat alias — older prompts/tools still call save_memory.
+  const saveMemoryTool = tool({
+    name: "save_memory",
+    description: "Alias of 'remember'. Save a fact to long-term memory.",
+    parameters: {
+      fact: z.string().describe("The fact to remember."),
+      type: memoryTypeEnum.optional(),
     },
+    implementation: rememberImpl,
   });
   tools.push(saveMemoryTool);
+
+  const forgetTool = tool({
+    name: "forget",
+    description: "Remove a remembered fact. Provide a short description ('query') of what to forget; the closest matching memory is removed.",
+    parameters: {
+      query: z.string().describe("Description of the memory to remove."),
+      fact: z.string().optional().describe("Alias of query."),
+      text: z.string().optional().describe("Alias of query."),
+    },
+    implementation: async (args) => {
+      if (!enableMemory) return { error: "Memory is disabled in settings." };
+      await refreshState();
+      const query = (args.query ?? args.fact ?? args.text);
+      if (typeof query !== "string" || query.trim().length === 0) return { error: "Provide a 'query' describing what to forget." };
+      const memoryPath = resolveMemoryPath(memoryScope, projectDirectory, toolboxHome);
+      let parsed = { preamble: "", entries: [] as MemoryEntry[] };
+      try { parsed = parseMemory(await readFile(memoryPath, "utf-8")); } catch { return { success: false, action: "not_found", message: "No memories saved yet." }; }
+      const matchId = (await findMemoryMatch(query, parsed.entries)) ?? stringSimilarityMatch(query, parsed.entries);
+      if (!matchId) return { success: false, action: "not_found", message: "No matching memory found." };
+      const removed = parsed.entries.find(e => e.id === matchId);
+      const { next, action } = forgetMemory(parsed, { matchId });
+      try { await writeFile(memoryPath, serializeMemory(next), "utf-8"); } catch (e) { return { error: `Failed to write memory: ${e instanceof Error ? e.message : String(e)}` }; }
+      return { success: true, action, removed: removed?.title, count: next.entries.length };
+    },
+  });
+  tools.push(forgetTool);
 
   const originalRunJavascriptImplementation = async ({ javascript, timeout_seconds }: { javascript: string; timeout_seconds?: number }) => {
     const scriptFileName = `temp_script_${Date.now()}.ts`;
