@@ -1,6 +1,6 @@
-import { join } from "path";
+import { join, dirname } from "path";
 import { readFile, writeFile, mkdir, access } from "fs/promises";
-import { os } from "os";
+import * as os from "os";
 
 export interface ProjectState {
   projectDirectory: string | null;
