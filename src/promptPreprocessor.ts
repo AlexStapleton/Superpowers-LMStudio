@@ -18,7 +18,7 @@ import { loadSkillsCached, getSkillsDirCandidates, renderDispatcherCompact, matc
 import { appendRoutingEvent } from "./routingLog";
 import { semanticMatch, buildEmbeddingText, QUERY_PREFIX, DOC_PREFIX, type SkillEmbedding } from "./semanticRouter";
 import { parseProjectCommand, resolveMemoryPath, type MemoryScope } from "./projectBoundary";
-import { parseMemory, serializeMemory, renderForInjection, upsertMemory, stringSimilarityMatch, extractRememberDirective, extractCorrectionDirective, inferMemoryType, type MemoryEntry } from "./memory";
+import { parseMemory, serializeMemory, renderForInjection, upsertMemory, stringSimilarityMatch, extractRememberDirective, extractCorrectionDirective, inferMemoryType, parseMemoryCommand, consolidateMemory, type MemoryEntry } from "./memory";
 import { buildProtectedGlobs, isProtectedPath } from "./protectedPaths";
 
 // Cache of skill embeddings (recomputed only when the skill set changes). C1 semantic router.
@@ -193,6 +193,42 @@ async function autoCaptureMemory(
   }
 }
 
+/**
+ * Deterministic /memory command: `/memory` lists saved memories; `/memory consolidate` merges
+ * near-duplicates and prunes over the soft cap, reporting exactly what changed (no silent truncation).
+ */
+async function handleMemoryCommand(
+  ctl: PromptPreprocessorController,
+  cmd: { kind: "show" | "consolidate" },
+  defaultWorkspacePath: string,
+  memoryScope: MemoryScope,
+  enableMemory: boolean,
+  maxEntries: number,
+): Promise<string> {
+  if (!enableMemory) return "Tell the user, briefly, that memory is currently disabled in the plugin settings.";
+  const toolboxHome = join(os.homedir(), ".beledarians-llm-toolbox");
+  const state = await getPersistedState(defaultWorkspacePath);
+  const memPath = resolveMemoryPath(memoryScope, state.projectDirectory ?? null, toolboxHome);
+  let parsed = { preamble: "", entries: [] as MemoryEntry[] };
+  try { parsed = parseMemory(await readFile(memPath, "utf-8")); } catch { /* missing = empty */ }
+
+  if (cmd.kind === "show") {
+    const list = parsed.entries.map(e => `- [${e.type}] ${e.fact}`).join("\n") || "(no memories saved yet)";
+    try { ctl.createStatus({ status: "done", text: `${parsed.entries.length} memories — ${memPath}` }); } catch { /* best-effort */ }
+    return `List the user's saved memories back to them verbatim, then stop:\n${list}`;
+  }
+
+  // consolidate
+  const { next, merged, dropped } = consolidateMemory(parsed, { maxEntries });
+  try {
+    await mkdir(dirname(memPath), { recursive: true });
+    await writeFile(memPath, serializeMemory(next), "utf-8");
+  } catch { /* best-effort */ }
+  const summary = `Consolidated memory: merged ${merged} duplicate(s), dropped ${dropped} over cap; ${next.entries.length} remain.`;
+  try { ctl.createStatus({ status: "done", text: summary }); } catch { /* best-effort */ }
+  return `Tell the user, briefly: ${summary}`;
+}
+
 export async function promptPreprocessor(ctl: PromptPreprocessorController, userMessage: ChatMessage) {
   const userPrompt = userMessage.getText();
 
@@ -207,6 +243,19 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
       earlyConfig.get("defaultWorkspacePath"),
       (earlyConfig.get("memoryScope") as MemoryScope) || "auto",
       earlyConfig.get("protectedPaths"),
+    );
+  }
+
+  // /memory command: deterministic view / consolidate.
+  const memCmd = parseMemoryCommand(userPrompt);
+  if (memCmd.kind !== "none") {
+    return await handleMemoryCommand(
+      ctl,
+      memCmd,
+      earlyConfig.get("defaultWorkspacePath"),
+      (earlyConfig.get("memoryScope") as MemoryScope) || "auto",
+      earlyConfig.get("enableMemory"),
+      earlyConfig.get("memoryMaxEntries") || 100,
     );
   }
 

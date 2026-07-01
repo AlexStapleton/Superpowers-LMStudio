@@ -130,6 +130,15 @@ function normalizeWords(s: string): Set<string> {
   return new Set(s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean));
 }
 
+function jaccard(a: string, b: string): number {
+  const sa = normalizeWords(a), sb = normalizeWords(b);
+  if (sa.size === 0 || sb.size === 0) return 0;
+  let inter = 0;
+  for (const w of sa) if (sb.has(w)) inter++;
+  const union = sa.size + sb.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+
 /** Token-Jaccard fallback used only when the embedding model is unavailable. */
 export function stringSimilarityMatch(fact: string, entries: MemoryEntry[], threshold = 0.6): string | null {
   const a = normalizeWords(fact);
@@ -145,6 +154,53 @@ export function stringSimilarityMatch(fact: string, entries: MemoryEntry[], thre
     if (!best || score > best.score) best = { id: e.id, score };
   }
   return best && best.score >= threshold ? best.id : null;
+}
+
+/** The "newer" of two entries: the one whose updated-or-added date sorts later (tie → the second). */
+function preferNewer(a: MemoryEntry, b: MemoryEntry): MemoryEntry {
+  return (a.updated ?? a.added) > (b.updated ?? b.added) ? a : b;
+}
+
+/**
+ * Consolidation pass: merge same-type near-duplicate entries (keeping the newer) and, when maxEntries
+ * is given and exceeded, drop the oldest surplus. Returns counts so the caller can surface exactly what
+ * changed — no silent truncation. Pure + testable.
+ */
+export function consolidateMemory(
+  p: ParsedMemory,
+  opts: { maxEntries?: number; similarity?: number } = {},
+): { next: ParsedMemory; merged: number; dropped: number } {
+  const sim = opts.similarity ?? 0.7;
+  const kept: MemoryEntry[] = [];
+  let merged = 0;
+  for (const e of p.entries) {
+    const dupIdx = kept.findIndex(k => k.type === e.type && jaccard(k.fact, e.fact) >= sim);
+    if (dupIdx >= 0) {
+      kept[dupIdx] = preferNewer(kept[dupIdx], e);
+      merged++;
+    } else {
+      kept.push(e);
+    }
+  }
+  let dropped = 0;
+  let finalEntries = kept;
+  if (opts.maxEntries && kept.length > opts.maxEntries) {
+    dropped = kept.length - opts.maxEntries;
+    finalEntries = kept.slice(dropped); // entries are append-ordered oldest→newest; drop from the front
+  }
+  return { next: { ...p, entries: finalEntries }, merged, dropped };
+}
+
+export type MemoryCommand = { kind: "show" } | { kind: "consolidate" } | { kind: "none" };
+
+/** Parse a leading `/memory` command. `/memory` → show; `/memory consolidate|prune|clean` → consolidate. */
+export function parseMemoryCommand(text: string): MemoryCommand {
+  const m = (text ?? "").trim().match(/^\/memory(?:\s+(\S+))?$/i);
+  if (!m) return { kind: "none" };
+  const arg = (m[1] ?? "").toLowerCase();
+  if (!arg) return { kind: "show" };
+  if (arg === "consolidate" || arg === "prune" || arg === "clean") return { kind: "consolidate" };
+  return { kind: "show" };
 }
 
 const TYPE_ORDER: MemoryType[] = ["user", "preference", "project", "reference"];

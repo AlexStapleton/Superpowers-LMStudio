@@ -4,6 +4,7 @@ const {
   parseMemory, serializeMemory, slugTitle,
   upsertMemory, forgetMemory, stringSimilarityMatch, renderForInjection,
   extractRememberDirective, inferMemoryType, extractCorrectionDirective,
+  consolidateMemory, parseMemoryCommand,
 } = require("../dist/memory.js");
 
 test("slugTitle: first 8 words, sentence-cased title + kebab id", () => {
@@ -144,4 +145,31 @@ test("extractCorrectionDirective: ignores task-level corrections and unrelated t
   assert.equal(extractCorrectionDirective("actually summarize the report"), null);
   assert.equal(extractCorrectionDirective("that looks correct"), null);
   assert.equal(extractCorrectionDirective(""), null);
+});
+
+test("consolidateMemory: merges near-duplicates, keeps distinct, drops oldest over cap", () => {
+  const p = { preamble: "", entries: [
+    { id: "a", type: "preference", title: "Dark mode", fact: "I prefer dark mode", added: "2026-06-01", source: "chat" },
+    { id: "b", type: "preference", title: "Dark mode", fact: "I prefer the dark mode", added: "2026-06-10", updated: "2026-06-10", source: "chat" },
+    { id: "c", type: "user", title: "Name", fact: "my name is Alex", added: "2026-06-05", source: "chat" },
+  ]};
+  const r = consolidateMemory(p, { similarity: 0.7 });
+  assert.equal(r.merged, 1);                       // the two dark-mode prefs merge (jaccard 0.8)
+  assert.equal(r.next.entries.length, 2);          // merged pref + name
+  const pref = r.next.entries.find(e => e.type === "preference");
+  assert.equal(pref.fact, "I prefer the dark mode"); // newer (has updated) kept
+
+  const capped = consolidateMemory(p, { similarity: 0.99, maxEntries: 2 }); // no merges, cap drops oldest
+  assert.equal(capped.merged, 0);
+  assert.equal(capped.dropped, 1);
+  assert.equal(capped.next.entries.length, 2);
+  assert.ok(!capped.next.entries.some(e => e.id === "a")); // "a" (oldest, 2026-06-01) dropped
+});
+
+test("parseMemoryCommand: show / consolidate / none", () => {
+  assert.deepEqual(parseMemoryCommand("/memory"), { kind: "show" });
+  assert.deepEqual(parseMemoryCommand("  /MEMORY  "), { kind: "show" });
+  assert.deepEqual(parseMemoryCommand("/memory consolidate"), { kind: "consolidate" });
+  assert.deepEqual(parseMemoryCommand("/memory prune"), { kind: "consolidate" });
+  assert.deepEqual(parseMemoryCommand("what do you remember?"), { kind: "none" });
 });
