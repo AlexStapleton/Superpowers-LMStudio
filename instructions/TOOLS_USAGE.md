@@ -56,7 +56,7 @@
 - **preview_html**: Render HTML in default browser.
 
 ### Agent & Memory
-- **save_memory**: Save facts to `memory.md`.
+- **remember** / **forget**: Save or remove long-term facts (structured, deduped `memory.md`). Only registered when memory is enabled. Users can also set a project scope with the `/project <path>` command or `set_project_directory`.
 - **consult_secondary_agent**: Delegate tasks (summarization, coding) to a secondary model/server.
     - **Auto-Save**: Automatically detects and saves code blocks to files.
     - **Auto-Debug**: Can automatically review and fix code if enabled.

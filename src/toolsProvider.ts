@@ -781,20 +781,6 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
     },
     implementation: rememberImpl,
   });
-  tools.push(rememberTool);
-
-  // Back-compat alias — older prompts/tools still call save_memory.
-  const saveMemoryTool = tool({
-    name: "save_memory",
-    description: "Alias of 'remember'. Save a fact to long-term memory.",
-    parameters: {
-      fact: z.string().describe("The fact to remember."),
-      type: memoryTypeEnum.optional(),
-    },
-    implementation: rememberImpl,
-  });
-  tools.push(saveMemoryTool);
-
   const forgetTool = tool({
     name: "forget",
     description: "Remove a remembered fact. Provide a short description ('query') of what to forget; the closest matching memory is removed.",
@@ -819,7 +805,12 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       return { success: true, action, removed: removed?.title, count: next.entries.length };
     },
   });
-  tools.push(forgetTool);
+  // Register the memory tools only when memory is enabled — don't advertise tools a 12B can't use
+  // (a smaller tool manifest is easier for the small model to call reliably).
+  if (enableMemory) {
+    tools.push(rememberTool);
+    tools.push(forgetTool);
+  }
 
   const originalRunJavascriptImplementation = async ({ javascript, timeout_seconds }: { javascript: string; timeout_seconds?: number }) => {
     const scriptFileName = `temp_script_${Date.now()}.ts`;
@@ -4370,7 +4361,7 @@ Always assume relative paths are from this directory.`;
   // Within each category, preserve alphabetical order.
   const casualTools = new Set([
     // File ops
-    "change_directory", "list_directory", "read_file", "read_file_range",
+    "change_directory", "set_project_directory", "list_directory", "read_file", "read_file_range",
     "save_file", "create_file", "move_file", "copy_file",
     "delete_path", "delete_files_by_pattern", "make_directory",
     "find_files", "fuzzy_find_local_files", "get_file_metadata",
@@ -4384,7 +4375,7 @@ Always assume relative paths are from this directory.`;
     // System / utility
     "get_system_info", "get_current_datetime", "read_clipboard", "write_clipboard",
     "open_file_or_url", "preview_html", "read_document",
-    "save_memory", "send_notification",
+    "remember", "forget", "send_notification",
   ]);
 
   tools.sort((a, b) => {
