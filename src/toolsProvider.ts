@@ -23,6 +23,8 @@ import { isTestFile, evaluateGuardrail, resolveActiveWorkflow, webSearchFetchDir
 import { normalizeSearchQueries, stripPageBoilerplate, isTextualContentType, WEB_FETCH_HEADERS } from "./webSearch";
 import { coerceFileName, coerceFileContent } from "./toolArgs";
 import { findSystemBrowserPath } from "./findBrowser";
+import { isWithinBoundary, resolveMemoryPath, type MemoryScope } from "./projectBoundary";
+import { parseMemory, serializeMemory, upsertMemory, forgetMemory, stringSimilarityMatch, type MemoryEntry } from "./memory";
 
 import type { Browser, Page } from "puppeteer";
 
@@ -134,6 +136,11 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
   const client = (ctl as any).client as LMStudioClient;
   const pluginConfig = ctl.getPluginConfig(pluginConfigSchematics);
   const defaultWorkspacePath = pluginConfig.get("defaultWorkspacePath");
+  const toolboxHome = join(os.homedir(), ".beledarians-llm-toolbox");
+  const memoryScope = (pluginConfig.get("memoryScope") as MemoryScope) || "auto";
+  const memoryDedupeThreshold = parseFloat(pluginConfig.get("memoryDedupeThreshold")) || 0.85;
+  const memoryMaxEntries = pluginConfig.get("memoryMaxEntries") || 100;
+  const defaultProjectPath = pluginConfig.get("defaultProjectPath");
 
   // Load state using shared manager
   const fullState = await getPersistedState(defaultWorkspacePath);
@@ -159,13 +166,60 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
   // untouched default — then stop, so a later cross-project peek-read can't silently relocate writes.
   let workspaceEstablished = false;
 
+  // --- Project directory (hard read boundary + memory anchor). null = unset. ---
+  let projectDirectory: string | null = fullState.projectDirectory ?? null;
+  if (!projectDirectory && defaultProjectPath && defaultProjectPath.trim()) {
+    const expanded = defaultProjectPath.replace(/%([^%]+)%/g, (_m: string, v: string) => process.env[v] ?? `%${v}%`);
+    if (existsSync(expanded)) projectDirectory = resolve(expanded);
+  }
+  if (projectDirectory && !existsSync(projectDirectory)) {
+    console.warn(`Project directory '${projectDirectory}' no longer exists; reverting to global/open.`);
+    projectDirectory = null;
+  }
+  if (projectDirectory) {
+    if (!isWithinBoundary(projectDirectory, resolve(currentWorkingDirectory))) currentWorkingDirectory = projectDirectory;
+    workspaceEstablished = true;
+  }
+  fullState.projectDirectory = projectDirectory;
+  fullState.currentWorkingDirectory = currentWorkingDirectory;
+  await savePersistedState(fullState);
+
+  // The /project command (handled in the prompt preprocessor) writes the active project + CWD to
+  // .plugin_state.json. Re-read it so a mid-session switch takes effect on the next tool call.
+  const refreshState = async () => {
+    try {
+      const s = await getPersistedState(defaultWorkspacePath);
+      projectDirectory = s.projectDirectory ?? null;
+      if (projectDirectory && existsSync(projectDirectory)) {
+        currentWorkingDirectory = s.currentWorkingDirectory;
+        workspaceEstablished = true;
+      } else {
+        projectDirectory = null;
+      }
+    } catch { /* best-effort */ }
+  };
+
+  const assertWithinBoundary = (resolved: string) => {
+    if (projectDirectory && !isWithinBoundary(projectDirectory, resolved)) {
+      throw new Error(`Access blocked: '${resolved}' is outside the active project directory '${projectDirectory}'. Use the /project command or set_project_directory to change projects.`);
+    }
+  };
+
   // Resolve a path for READ tools. A relative path resolves within the current workspace. An ABSOLUTE
   // path is allowed (subject to the deny-list) so the model can read/explore any project it's pointed
   // at. The first absolute reference establishes the working project; subsequent ones do not move it.
+  // When a project directory is pinned, it becomes a HARD boundary: absolute reads outside it are
+  // refused (no auto-root), and relative reads may traverse the whole project tree.
   const resolveReadPath = async (requestedPath: string): Promise<string> => {
+    await refreshState();
     if (isAbsolute(requestedPath)) {
       const resolved = resolve(requestedPath);
       assertNotProtected(resolved);
+      if (projectDirectory) {
+        assertWithinBoundary(resolved); // refuse outside the project; do NOT auto-root
+        try { await stat(resolved); } catch { throw new Error(`Path not found: ${requestedPath}`); }
+        return resolved;
+      }
       let st;
       try { st = await stat(resolved); } catch { throw new Error(`Path not found: ${requestedPath}`); }
       if (!workspaceEstablished) {
@@ -178,6 +232,13 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
           savePersistedState(fullState).catch(() => { /* best-effort */ });
         }
       }
+      return resolved;
+    }
+    if (projectDirectory) {
+      // Project-wide relative reads: resolve against CWD, confine to the project tree (may traverse up to root).
+      const resolved = resolve(currentWorkingDirectory, requestedPath);
+      assertNotProtected(resolved);
+      assertWithinBoundary(resolved);
       return resolved;
     }
     const resolved = validatePath(currentWorkingDirectory, requestedPath);
@@ -576,6 +637,10 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       if (!stats.isDirectory()) {
         throw new Error(`Path is not a directory: ${newPath}`);
       }
+      await refreshState();
+      if (projectDirectory && !isWithinBoundary(projectDirectory, newPath)) {
+        return { error: `'${newPath}' is outside the active project directory '${projectDirectory}'. Use /project ${newPath} to switch projects, or stay within the project.` };
+      }
       currentWorkingDirectory = newPath;
       workspaceEstablished = true; // explicit set — subsequent reads won't auto-relocate the write-root
       // Persist the new state
@@ -595,10 +660,53 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
     description: "Return the current working directory (the equivalent of `pwd`). Read-only, always available — use this for any 'pwd' / 'what directory am I in' question instead of execute_command(\"pwd\") or run_python, which may be disabled.",
     parameters: {},
     implementation: async () => {
-      return { current_directory: currentWorkingDirectory };
+      await refreshState();
+      const memoryPath = resolveMemoryPath(memoryScope, projectDirectory, toolboxHome);
+      return {
+        current_directory: currentWorkingDirectory,
+        project_directory: projectDirectory ?? "(none — open reads, global memory)",
+        memory_path: memoryPath,
+      };
     },
   });
   tools.push(getCurrentDirectoryTool);
+
+  const setProjectDirectoryTool = tool({
+    name: "set_project_directory",
+    description: "Pin a project root: a hard boundary the assistant reads/writes within, and the anchor for that project's memory.md. Pass an absolute or relative directory. Pass an empty string to clear it (revert to open reads + global memory).",
+    parameters: {
+      directory: z.string().describe("Absolute or relative directory to pin as the project root. Empty string clears it."),
+    },
+    implementation: async ({ directory }) => {
+      await refreshState();
+      const raw = (directory ?? "").trim();
+      if (!raw) {
+        projectDirectory = null;
+        fullState.projectDirectory = null;
+        await savePersistedState(fullState);
+        return { success: true, project_directory: null, message: "Project directory cleared. Reads are open; memory is global." };
+      }
+      const resolved = resolve(currentWorkingDirectory, raw);
+      try {
+        const st = await stat(resolved);
+        if (!st.isDirectory()) return { error: `Not a directory: ${resolved}` };
+      } catch {
+        return { error: `Directory not found: ${resolved}` };
+      }
+      assertNotProtected(resolved);
+      projectDirectory = resolved;
+      currentWorkingDirectory = resolved;
+      workspaceEstablished = true;
+      fullState.projectDirectory = resolved;
+      fullState.currentWorkingDirectory = resolved;
+      await savePersistedState(fullState);
+      // Stub the project memory file so recall has an anchor and the user can see it exists.
+      const memoryPath = resolveMemoryPath(memoryScope, projectDirectory, toolboxHome);
+      try { await mkdir(dirname(memoryPath), { recursive: true }); if (!existsSync(memoryPath)) await writeFile(memoryPath, "# Memory\n", "utf-8"); } catch { /* best-effort */ }
+      return { success: true, project_directory: resolved, memory_path: memoryPath, message: `Project set to ${resolved}. Reads are confined here; memory at ${memoryPath}.` };
+    },
+  });
+  tools.push(setProjectDirectoryTool);
 
   const saveMemoryTool = tool({
     name: "save_memory",
