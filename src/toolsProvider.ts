@@ -767,9 +767,11 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
   const rememberTool = tool({
     name: "remember",
     description: text`
-      Save a fact to long-term memory so it persists across conversations. Use for user preferences,
-      durable project facts, and context worth keeping. Provide 'fact'; optionally 'type'
-      (user | preference | project | reference). Near-duplicates UPDATE the existing memory instead of piling up.
+      Save a fact to long-term memory so it persists across conversations. Accepts ANY durable fact worth
+      keeping — user preferences, project facts, reference pointers, and tool-usage conventions the user has
+      approved (e.g. "always X before Y"); it is not limited to facts the user explicitly stated. Provide
+      'fact'; optionally 'type' (user | preference | project | reference). Near-duplicates UPDATE the
+      existing memory instead of piling up. Only save conventions the user has confirmed, not guesses.
     `,
     parameters: {
       fact: z.string().describe("The fact to remember."),

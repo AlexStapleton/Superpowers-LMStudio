@@ -519,8 +519,10 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
 
   // Soft nudge (when memory is on): guide the model to save INFERRED durable facts via the `remember`
   // tool. Explicit "remember that…" is already captured deterministically above; this covers the rest.
+  // Clarifies that `remember` is NOT limited to user-stated facts — tool-usage conventions the user has
+  // approved are valid too — while keeping the guard against autonomously banking unconfirmed guesses.
   if (memoryEnabled) {
-    currentContent += "\n\n[Memory is ON. If the user reveals a durable fact about themselves (name, role, location, language) or a lasting preference/convention (how they want answers, tools or style to use/avoid, project rules), call the `remember` tool to save it. Ignore ephemeral task details and anything already in the code.]";
+    currentContent += "\n\n[Memory is ON. Use the `remember` tool to save any durable fact worth keeping across conversations — about the user (name, role, location, language), a lasting preference (answer length/style, tools to use or avoid), a project rule, or a tool-usage convention the user has approved (e.g. \"always X before Y\"). `remember` accepts any such fact, not only ones the user explicitly stated; but only save conventions the user has confirmed — never bank unconfirmed guesses. Skip ephemeral task details and anything already in the code.]";
   }
 
   // Ambient date (D3) + active project (if pinned): prepend on EVERY turn so the model can anchor
