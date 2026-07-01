@@ -17,6 +17,8 @@ export interface PluginState {
   turnsSinceWorkflowInject: number;
   /** Consecutive turns the active workflow has not re-matched — drives sticky expiry (skills.ts). */
   workflowNoMatchStreak: number;
+  /** User-pinned project root: hard read boundary + memory anchor. null = unset (global memory, open reads). */
+  projectDirectory: string | null;
 }
 
 function resolveWorkspaceDirectory(configuredWorkspacePath?: string): string {
@@ -45,6 +47,7 @@ export async function getPersistedState(configuredWorkspacePath?: string): Promi
       lastInjectedWorkflow: state.lastInjectedWorkflow ?? null,
       turnsSinceWorkflowInject: state.turnsSinceWorkflowInject ?? 0,
       workflowNoMatchStreak: state.workflowNoMatchStreak ?? 0,
+      projectDirectory: state.projectDirectory ?? null,
     };
   } catch (error) {
     return {
@@ -56,6 +59,7 @@ export async function getPersistedState(configuredWorkspacePath?: string): Promi
       lastInjectedWorkflow: null,
       turnsSinceWorkflowInject: 0,
       workflowNoMatchStreak: 0,
+      projectDirectory: null,
     };
   }
 }
