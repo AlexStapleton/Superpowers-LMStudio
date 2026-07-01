@@ -8,7 +8,7 @@ triggers:
   - "add (a |the )?(feature|function|method|endpoint|test)"
   - "write (the )?code"
   - "write (a |an |the )?(function|method|class|endpoint|component|feature)"
-  - "build (a|the|me)"
+  - "build(ing)? (a |an |the |me |us |your )?([\\w-]+ ){0,3}?(function|method|class|endpoint|component|module|app|api|cli|service|parser|form|script|page|library|website|site|server|dashboard|game|feature|button|modal|widget|tool)\\b"
   - "create (a|the) (function|class|component|module)"
   - "fix(ing)? (the )?(feature|function)"
 examples:

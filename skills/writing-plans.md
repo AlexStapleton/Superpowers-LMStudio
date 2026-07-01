@@ -6,11 +6,17 @@ priority: 10
 triggers:
   - "write (an?|the) (implementation )?plan"
   - "create (an?|the) (implementation )?plan"
+  - "(build|make|draft|produce|generate|give me|want|see|show me|need) (to see )?(an?|the) (implementation )?plan\\b"
   - "\\bplan (out )?(the )?(implementation|work|approach)"
+  - "\\bplan\\.md\\b"
+  - "\\bdecompos(e|ition)\\b"
 examples:
   - "write an implementation plan for this"
   - "create a plan for the migration"
   - "plan out the implementation"
+  - "Build a recommendation for the decomposition. I want to see a plan.md for this"
+  - "build a plan for the decomposition"
+  - "I want to see a plan.md for this"
 ---
 
 Before doing anything else — including any tool call — output the line: "Using Writing Plans —". Then proceed.

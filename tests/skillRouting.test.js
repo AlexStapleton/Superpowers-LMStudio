@@ -49,6 +49,26 @@ test("each skill example routes to that skill", async (t) => {
   }
 });
 
+// Regression: a planning/analysis request must not be captured by the `tdd` workflow.
+// "Build a recommendation … I want to see a plan.md" once matched tdd via the greedy
+// `build (a|the|me)` trigger, injecting an unsatisfiable "write a failing test first"
+// procedure for a doc-writing task — which sent the 12B into a repetition loop.
+test("planning requests route to writing-plans, not tdd", async (t) => {
+  const skills = await loadSkills([SKILLS_DIR]);
+  const PLAN_PROMPTS = [
+    "Build a recommendation for the decomposition. I want to see a plan.md for this",
+    "build a plan for the decomposition",
+    "I want to see a plan.md for this",
+  ];
+  for (const p of PLAN_PROMPTS) {
+    await t.test(`"${p}" -> writing-plans`, () => {
+      const got = matchTriggers(skills, p);
+      assert.notEqual(got, "tdd", `planning prompt wrongly captured by tdd`);
+      assert.equal(got, "writing-plans", `expected writing-plans, got '${got}'`);
+    });
+  }
+});
+
 test("benign messages route to no skill", async (t) => {
   const skills = await loadSkills([SKILLS_DIR]);
   for (const neg of NEGATIVES) {
