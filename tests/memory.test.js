@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   parseMemory, serializeMemory, slugTitle,
   upsertMemory, forgetMemory, stringSimilarityMatch, renderForInjection,
+  extractRememberDirective, inferMemoryType,
 } = require("../dist/memory.js");
 
 test("slugTitle: first 8 words, sentence-cased title + kebab id", () => {
@@ -103,4 +104,29 @@ test("renderForInjection: groups by type; degrades to titles-only over budget", 
   assert.match(tiny, /- Concise answers/);
   assert.doesNotMatch(tiny, /short replies/);
   assert.equal(renderForInjection({ preamble: "", entries: [] }, { maxChars: 100 }), "");
+});
+
+test("extractRememberDirective: captures explicit memory phrasing", () => {
+  assert.equal(extractRememberDirective("Remember that I prefer concise answers."), "I prefer concise answers");
+  assert.equal(extractRememberDirective("remember: my name is Alex"), "my name is Alex");
+  assert.equal(extractRememberDirective("please remember I use TypeScript"), "I use TypeScript");
+  assert.equal(extractRememberDirective("note that we deploy on Fridays"), "we deploy on Fridays");
+  assert.equal(extractRememberDirective("don't forget that the config lives in .env"), "the config lives in .env");
+  assert.equal(extractRememberDirective("Keep in mind I'm based in Sydney"), "I'm based in Sydney");
+  assert.equal(extractRememberDirective("For future reference, the staging URL is example.com"), "the staging URL is example.com");
+});
+
+test("extractRememberDirective: ignores questions, todos, and unrelated text", () => {
+  assert.equal(extractRememberDirective("Do you remember the IPCC report?"), null); // question
+  assert.equal(extractRememberDirective("remember our first meeting?"), null);       // reminiscence (ends ?)
+  assert.equal(extractRememberDirective("remember to buy milk"), null);              // todo, not a fact
+  assert.equal(extractRememberDirective("Summarize the latest report"), null);       // unrelated
+  assert.equal(extractRememberDirective(""), null);
+});
+
+test("inferMemoryType: light classification with user default", () => {
+  assert.equal(inferMemoryType("I prefer concise answers"), "preference");
+  assert.equal(inferMemoryType("always use TypeScript"), "preference");
+  assert.equal(inferMemoryType("we deploy the repo on Fridays"), "project");
+  assert.equal(inferMemoryType("my name is Alex"), "user");
 });

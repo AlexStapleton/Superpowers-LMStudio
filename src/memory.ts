@@ -171,3 +171,45 @@ export function renderForInjection(p: ParsedMemory, opts: { maxChars: number }):
   const full = build(false);
   return full.length <= opts.maxChars ? full : build(true);
 }
+
+// Explicit "remember this" phrasings the code captures deterministically (no reliance on the 12B
+// choosing to call the tool). Ordered specific → general. The general "remember <x>" form excludes
+// todos ("remember to …") and reminiscence question-words so it only fires on durable facts.
+const REMEMBER_TRIGGERS: RegExp[] = [
+  /^\s*(?:please\s+)?remember\s+that\s+(.+)$/i,
+  /^\s*(?:please\s+)?remember\s*:\s*(.+)$/i,
+  /^\s*(?:please\s+)?note\s+that\s+(.+)$/i,
+  /^\s*(?:please\s+)?note\s*:\s*(.+)$/i,
+  /^\s*(?:please\s+)?keep in mind\s+(?:that\s+)?(.+)$/i,
+  /^\s*(?:please\s+)?don'?t forget\s+(?:that\s+)?(.+)$/i,
+  /^\s*for future reference[,:]?\s+(.+)$/i,
+  /^\s*(?:please\s+)?remember\s+(?!to\b|when\b|how\b|why\b|if\b|whether\b)(.+)$/i,
+];
+
+/**
+ * Detect an explicit request to remember a durable fact and return the fact text, else null.
+ * Deterministic capture path — ignores questions ("do you remember…?", trailing "?") and todos
+ * ("remember to …"). Pure + testable.
+ */
+export function extractRememberDirective(text: string): string | null {
+  const t = (text ?? "").trim();
+  if (!t) return null;
+  for (const re of REMEMBER_TRIGGERS) {
+    const m = t.match(re);
+    if (m && m[1]) {
+      const fact = m[1].trim().replace(/[.!\s]+$/, "").trim();
+      if (fact.endsWith("?")) return null;   // question / reminiscence, not a directive
+      if (fact.length < 2) return null;
+      return fact;
+    }
+  }
+  return null;
+}
+
+/** Light, code-side type guess for an auto-captured fact. Defaults to "user". */
+export function inferMemoryType(fact: string): MemoryType {
+  const f = fact.toLowerCase();
+  if (/\b(prefer|prefers|always|never|like|likes|dislike|hate|use|using|want you to|should|format|tone|concise|verbose|style)\b/.test(f)) return "preference";
+  if (/\b(project|repo|repository|deploy|deploys|stack|convention|codebase|build|tests?|branch|api)\b/.test(f)) return "project";
+  return "user";
+}

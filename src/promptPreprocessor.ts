@@ -18,7 +18,7 @@ import { loadSkillsCached, getSkillsDirCandidates, renderDispatcherCompact, matc
 import { appendRoutingEvent } from "./routingLog";
 import { semanticMatch, buildEmbeddingText, QUERY_PREFIX, DOC_PREFIX, type SkillEmbedding } from "./semanticRouter";
 import { parseProjectCommand, resolveMemoryPath, type MemoryScope } from "./projectBoundary";
-import { parseMemory, renderForInjection } from "./memory";
+import { parseMemory, serializeMemory, renderForInjection, upsertMemory, stringSimilarityMatch, extractRememberDirective, inferMemoryType, type MemoryEntry } from "./memory";
 import { buildProtectedGlobs, isProtectedPath } from "./protectedPaths";
 
 // Cache of skill embeddings (recomputed only when the skill set changes). C1 semantic router.
@@ -152,6 +152,43 @@ async function handleProjectCommand(
   return `Tell the user, briefly: the project directory is now ${resolved}; reads are confined there and memories are saved at ${mp}.`;
 }
 
+/**
+ * Deterministic memory capture. When the user explicitly states a fact to remember ("remember that…",
+ * "note that…"), CODE writes it — no reliance on the 12B deciding to call the `remember` tool (which it
+ * does unreliably, and the call can leak on the chat template). Returns a short ack note to prepend so
+ * the model confirms; null when nothing was captured. Dedup uses string similarity (no embedding call
+ * on the hot path). Mirrors the /project command's "code acts, model just acknowledges" pattern.
+ */
+async function autoCaptureMemory(
+  ctl: PromptPreprocessorController,
+  userPrompt: string,
+  defaultWorkspacePath: string,
+  memoryScope: MemoryScope,
+  enableMemory: boolean,
+): Promise<string | null> {
+  if (!enableMemory) return null;
+  const fact = extractRememberDirective(userPrompt);
+  if (!fact) return null;
+  try {
+    const toolboxHome = join(os.homedir(), ".beledarians-llm-toolbox");
+    const state = await getPersistedState(defaultWorkspacePath);
+    const memPath = resolveMemoryPath(memoryScope, state.projectDirectory ?? null, toolboxHome);
+    let parsed = { preamble: "", entries: [] as MemoryEntry[] };
+    try { parsed = parseMemory(await readFile(memPath, "utf-8")); } catch { /* missing = empty */ }
+    const matchId = stringSimilarityMatch(fact, parsed.entries);
+    const now = new Date();
+    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const { next, action } = upsertMemory(parsed, { fact, type: inferMemoryType(fact), date, matchId: matchId ?? undefined });
+    await mkdir(dirname(memPath), { recursive: true });
+    await writeFile(memPath, serializeMemory(next), "utf-8");
+    try { ctl.createStatus({ status: "done", text: `Memory ${action}: ${fact}` }); } catch { /* best-effort */ }
+    return `[Memory ${action} — you saved: "${fact}". Acknowledge this to the user in one short sentence.]`;
+  } catch (e) {
+    ctl.debug("Auto memory capture failed.", e);
+    return null;
+  }
+}
+
 export async function promptPreprocessor(ctl: PromptPreprocessorController, userMessage: ChatMessage) {
   const userPrompt = userMessage.getText();
 
@@ -168,6 +205,16 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
       earlyConfig.get("protectedPaths"),
     );
   }
+
+  // Deterministic memory capture for explicit "remember that…" phrasing (writes now; model just acks).
+  const memoryEnabled = earlyConfig.get("enableMemory");
+  const autoMemNote = await autoCaptureMemory(
+    ctl,
+    userPrompt,
+    earlyConfig.get("defaultWorkspacePath"),
+    (earlyConfig.get("memoryScope") as MemoryScope) || "auto",
+    memoryEnabled,
+  );
 
   // 1. RAG / Context Injection Logic
   const history = await ctl.pullHistory();
@@ -470,11 +517,19 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
     currentContent = `${injectionContent}\n\n---\n\n${currentContent}`;
   }
 
+  // Soft nudge (when memory is on): guide the model to save INFERRED durable facts via the `remember`
+  // tool. Explicit "remember that…" is already captured deterministically above; this covers the rest.
+  if (memoryEnabled) {
+    currentContent += "\n\n[Memory is ON. If the user reveals a durable fact about themselves (name, role, location, language) or a lasting preference/convention (how they want answers, tools or style to use/avoid, project rules), call the `remember` tool to save it. Ignore ephemeral task details and anything already in the code.]";
+  }
+
   // Ambient date (D3) + active project (if pinned): prepend on EVERY turn so the model can anchor
   // "next/latest/current" questions and always knows its read/write boundary. Done last so it lands
-  // at the very top of the assembled context.
+  // at the very top of the assembled context. The auto-capture ack (if any) rides at the very top so
+  // the model reliably confirms the save.
   let ambientPrefix = currentDateLine(new Date());
   if (state.projectDirectory) ambientPrefix += `\nActive project: ${state.projectDirectory}`;
+  if (autoMemNote) ambientPrefix += `\n${autoMemNote}`;
   currentContent = ambientPrefix + "\n\n" + currentContent;
 
   // Return the final content string if it changed, otherwise the original message
