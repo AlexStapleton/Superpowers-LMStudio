@@ -14,6 +14,7 @@
     "eval": "npm run build && node eval/run-eval.js",
     "judge-calibration": "npm run build && node eval/calibrate-judge.js",
     "semantic-probe": "npm run build && node eval/semantic-probe.js",
+    "memory-probe": "npm run build && node eval/memory-probe.js",
     "validate-skills": "npm run build && node scripts/validate-skills.js",
     "routing-recall": "npm run build && node scripts/routing-recall.js"
   },
