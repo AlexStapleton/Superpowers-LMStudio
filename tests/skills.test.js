@@ -135,10 +135,10 @@ test("loadSkills reads the real skills/ dir and parses all core skills", async (
   const skills = await loadSkills([path.join(pluginRoot, "skills")]);
   const names = skills.map(s => s.name).sort();
   assert.deepEqual(names, [
-    "brainstorming", "code-conventions", "debugging", "executing-a-plan",
-    "explaining-code", "finishing-a-branch", "parallel-dispatch", "receiving-code-review",
-    "requesting-code-review", "research", "subagent-driven", "tdd",
-    "verification", "writing-plans",
+    "brainstorming", "code-conventions", "code-simplification", "debugging",
+    "executing-a-plan", "explaining-code", "finishing-a-branch", "parallel-dispatch",
+    "receiving-code-review", "requesting-code-review", "research", "security-hardening",
+    "subagent-driven", "tdd", "verification", "writing-plans",
   ]);
 });
 

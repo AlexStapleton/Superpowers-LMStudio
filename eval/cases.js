@@ -138,6 +138,22 @@ const CASES = [
     prompt: "Can you run a code review over my diff before I push it?",
     checks: ["workflowLoaded", "toolInvoked", "announce"] },
 
+  // --- security-hardening (converted from addyosmani/agent-skills; phrasings avoid the triggers) ---
+  { id: "security-tool", mode: "tool", workflow: "security-hardening", announce: "Security Hardening",
+    prompt: "We're about to accept file uploads and fetch user-supplied URLs on the server — what should I lock down before this ships?",
+    checks: ["workflowLoaded", "toolInvoked", "announce"] },
+  { id: "security-router", mode: "router", workflow: "security-hardening", announce: "Security Hardening",
+    prompt: "This handler keeps user passwords and hands out session cookies — go through it and close any holes an attacker could use.",
+    checks: ["announce", "adherence"] },
+
+  // --- code-simplification (converted from addyosmani/agent-skills; phrasings avoid the triggers) ---
+  { id: "simplify-tool", mode: "tool", workflow: "code-simplification", announce: "Code Simplification",
+    prompt: "This function grew into a deeply nested tangle over time — tidy it up without changing what it does.",
+    checks: ["workflowLoaded", "toolInvoked", "announce"] },
+  { id: "simplify-router", mode: "router", workflow: "code-simplification", announce: "Code Simplification",
+    prompt: "The parser works but it's really hard to follow now — make it more readable while keeping the exact same behavior.",
+    checks: ["announce", "adherence"] },
+
   // --- new router-mode adherence cases (the "evidence-before-conclusion" hard half) ---
   { id: "tdd-router-2", mode: "router", workflow: "tdd", announce: "Test-Driven Development",
     prompt: "I need a debounce utility for the search box.",
