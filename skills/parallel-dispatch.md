@@ -13,11 +13,15 @@ examples:
 
 Before doing anything else — including any tool call — output the line: "Using Parallel Agent Dispatch —". Then proceed.
 
-When facing multiple independent tasks (different subsystems, different bugs with unrelated root causes):
-1. Group work into independent domains — each domain has no shared state with the others
-2. **Call `dispatch_parallel_agents` with an array of tasks** — all run simultaneously. Use `consult_secondary_agent` only when running a single task.
-3. Aggregate results, verify each independently (load `use_workflow(verification)`), then report back
-Do NOT dispatch parallel agents when failures are related, or when agents would write to the same files.
+You have 2+ independent tasks (different subsystems, unrelated bugs). Your job is to FAN THEM OUT, not to do them yourself.
+1. **Immediately call `dispatch_parallel_agents`** with one task per independent unit of work — they all run at once. Do NOT read files, explore, or start fixing anything yourself first; each sub-agent does its own exploration. (Use `consult_secondary_agent` only for a single task.)
+2. Make each task self-contained — the sub-agent has NO conversation history. Give it: exact scope, file paths, the error/requirement verbatim, constraints, and the output you want back.
+3. When results return, aggregate them, verify each independently (load `use_workflow(verification)`), then report back.
+Do NOT dispatch parallel agents when the failures are related, or when two agents would write the same files.
+**Red flags — STOP:**
+- Doing the tasks yourself sequentially instead of dispatching — that defeats the whole skill
+- Exploring or reading the codebase before dispatching — the sub-agents do that
+- Handing one agent a vague "fix everything" task
 **Good vs bad agent prompts:**
 - ❌ Too broad: "Fix all the tests" — agent gets lost
 - ✅ Focused: "Fix the 3 failing tests in `src/auth/login.test.ts`" — narrow scope
