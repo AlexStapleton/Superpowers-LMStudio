@@ -206,6 +206,36 @@ export function extractRememberDirective(text: string): string | null {
   return null;
 }
 
+// Corrections wrap a durable fact in a correction frame ("no, I …", "actually my …", "I told you …",
+// "correction: …"). We only fire when the corrected clause looks like a durable fact — self-referential
+// ("I/my/we/our") or explicitly marked — so task-level corrections ("no, use the other file") are ignored.
+const CORRECTION_TRIGGERS: RegExp[] = [
+  /^\s*correction\s*:\s*(.+)$/i,
+  /^\s*(?:no|nope)[,.\s—-]+i\s+(?:told you|already told you|said)\s+(?:that\s+)?(.+)$/i,
+  /^\s*i\s+(?:told you|already told you|said)\s+(?:that\s+)?(.+)$/i,
+  /^\s*(?:no|nope|actually|that'?s (?:wrong|not right|incorrect))[,.\s—-]+((?:i|i'?m|my|we|our)\b.+)$/i,
+];
+
+/**
+ * Detect a correction of a durable fact and return the corrected fact, else null. Fed through the same
+ * dedup-and-upsert as capture (with a looser match threshold) so it UPDATES the wrong memory rather
+ * than adding a contradiction. Pure + testable.
+ */
+export function extractCorrectionDirective(text: string): string | null {
+  const t = (text ?? "").trim();
+  if (!t) return null;
+  for (const re of CORRECTION_TRIGGERS) {
+    const m = t.match(re);
+    if (m && m[1]) {
+      const fact = m[1].trim().replace(/[.!\s]+$/, "").trim();
+      if (fact.endsWith("?")) return null;
+      if (fact.length < 2) return null;
+      return fact;
+    }
+  }
+  return null;
+}
+
 /** Light, code-side type guess for an auto-captured fact. Defaults to "user". */
 export function inferMemoryType(fact: string): MemoryType {
   const f = fact.toLowerCase();

@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const {
   parseMemory, serializeMemory, slugTitle,
   upsertMemory, forgetMemory, stringSimilarityMatch, renderForInjection,
-  extractRememberDirective, inferMemoryType,
+  extractRememberDirective, inferMemoryType, extractCorrectionDirective,
 } = require("../dist/memory.js");
 
 test("slugTitle: first 8 words, sentence-cased title + kebab id", () => {
@@ -129,4 +129,19 @@ test("inferMemoryType: light classification with user default", () => {
   assert.equal(inferMemoryType("always use TypeScript"), "preference");
   assert.equal(inferMemoryType("we deploy the repo on Fridays"), "project");
   assert.equal(inferMemoryType("my name is Alex"), "user");
+});
+
+test("extractCorrectionDirective: captures corrections of durable facts", () => {
+  assert.equal(extractCorrectionDirective("No, I prefer Rust"), "I prefer Rust");
+  assert.equal(extractCorrectionDirective("actually my name is Alex"), "my name is Alex");
+  assert.equal(extractCorrectionDirective("I told you I use TypeScript"), "I use TypeScript");
+  assert.equal(extractCorrectionDirective("correction: the staging url is stg.example.com"), "the staging url is stg.example.com");
+  assert.equal(extractCorrectionDirective("that's wrong, I'm based in Berlin"), "I'm based in Berlin");
+});
+
+test("extractCorrectionDirective: ignores task-level corrections and unrelated text", () => {
+  assert.equal(extractCorrectionDirective("no, use the other file"), null);   // task correction, not a durable fact
+  assert.equal(extractCorrectionDirective("actually summarize the report"), null);
+  assert.equal(extractCorrectionDirective("that looks correct"), null);
+  assert.equal(extractCorrectionDirective(""), null);
 });

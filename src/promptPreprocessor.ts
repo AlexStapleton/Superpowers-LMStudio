@@ -18,7 +18,7 @@ import { loadSkillsCached, getSkillsDirCandidates, renderDispatcherCompact, matc
 import { appendRoutingEvent } from "./routingLog";
 import { semanticMatch, buildEmbeddingText, QUERY_PREFIX, DOC_PREFIX, type SkillEmbedding } from "./semanticRouter";
 import { parseProjectCommand, resolveMemoryPath, type MemoryScope } from "./projectBoundary";
-import { parseMemory, serializeMemory, renderForInjection, upsertMemory, stringSimilarityMatch, extractRememberDirective, inferMemoryType, type MemoryEntry } from "./memory";
+import { parseMemory, serializeMemory, renderForInjection, upsertMemory, stringSimilarityMatch, extractRememberDirective, extractCorrectionDirective, inferMemoryType, type MemoryEntry } from "./memory";
 import { buildProtectedGlobs, isProtectedPath } from "./protectedPaths";
 
 // Cache of skill embeddings (recomputed only when the skill set changes). C1 semantic router.
@@ -167,7 +167,11 @@ async function autoCaptureMemory(
   enableMemory: boolean,
 ): Promise<string | null> {
   if (!enableMemory) return null;
-  const fact = extractRememberDirective(userPrompt);
+  // Explicit "remember that…" first; else a correction of a durable fact ("no, I prefer …"). A correction
+  // should OVERWRITE the wrong memory, so it dedups with a looser threshold to find the entry to replace.
+  let fact = extractRememberDirective(userPrompt);
+  let isCorrection = false;
+  if (!fact) { fact = extractCorrectionDirective(userPrompt); isCorrection = fact !== null; }
   if (!fact) return null;
   try {
     const toolboxHome = join(os.homedir(), ".beledarians-llm-toolbox");
@@ -175,7 +179,7 @@ async function autoCaptureMemory(
     const memPath = resolveMemoryPath(memoryScope, state.projectDirectory ?? null, toolboxHome);
     let parsed = { preamble: "", entries: [] as MemoryEntry[] };
     try { parsed = parseMemory(await readFile(memPath, "utf-8")); } catch { /* missing = empty */ }
-    const matchId = stringSimilarityMatch(fact, parsed.entries);
+    const matchId = stringSimilarityMatch(fact, parsed.entries, isCorrection ? 0.34 : 0.6);
     const now = new Date();
     const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const { next, action } = upsertMemory(parsed, { fact, type: inferMemoryType(fact), date, matchId: matchId ?? undefined });
