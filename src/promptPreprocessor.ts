@@ -7,8 +7,9 @@ import {
   type PredictionProcessStatusController,
   type PromptPreprocessorController,
 } from "@lmstudio/sdk";
-import { readFile, writeFile } from "fs/promises";
-import { dirname, join } from "path";
+import * as os from "os";
+import { readFile, writeFile, mkdir, access, stat } from "fs/promises";
+import { dirname, join, resolve } from "path";
 import { pluginConfigSchematics } from "./config";
 import { TOOLS_DOCUMENTATION, TOOLS_DOCUMENTATION_LITE } from "./toolsDocumentation";
 import { getPersistedState, savePersistedState } from "./stateManager";
@@ -16,6 +17,9 @@ import { getDict } from "./locales/i18n";
 import { loadSkillsCached, getSkillsDirCandidates, renderDispatcherCompact, matchTriggers, decideWorkflowInjection, type InjectionAction, type Skill } from "./skills";
 import { appendRoutingEvent } from "./routingLog";
 import { semanticMatch, buildEmbeddingText, QUERY_PREFIX, DOC_PREFIX, type SkillEmbedding } from "./semanticRouter";
+import { parseProjectCommand, resolveMemoryPath, type MemoryScope } from "./projectBoundary";
+import { parseMemory, renderForInjection } from "./memory";
+import { buildProtectedGlobs, isProtectedPath } from "./protectedPaths";
 
 // Cache of skill embeddings (recomputed only when the skill set changes). C1 semantic router.
 let cachedSkillEmbeddings: { key: string; embeddings: SkillEmbedding[] } | null = null;
@@ -95,9 +99,76 @@ export function getSubAgentDocsCandidatePaths(currentWorkingDirectory: string): 
   ];
 }
 
+/**
+ * Deterministic /project command handling. The state change happens entirely in code here — the
+ * model's only job (via the returned instruction string) is to echo a one-line confirmation, the
+ * lowest-risk task for a 12B. .plugin_state.json is the single source of truth other callers re-read.
+ */
+async function handleProjectCommand(
+  ctl: PromptPreprocessorController,
+  cmd: { kind: "set"; path: string } | { kind: "clear" } | { kind: "show" },
+  defaultWorkspacePath: string,
+  memoryScope: MemoryScope,
+  protectedPathsConfig: string,
+): Promise<string> {
+  const toolboxHome = join(os.homedir(), ".beledarians-llm-toolbox");
+  const state = await getPersistedState(defaultWorkspacePath);
+
+  if (cmd.kind === "show") {
+    const mp = resolveMemoryPath(memoryScope, state.projectDirectory ?? null, toolboxHome);
+    const proj = state.projectDirectory ?? "(none — open reads, global memory)";
+    try { ctl.createStatus({ status: "done", text: `Project: ${proj} — memory: ${mp}` }); } catch { /* best-effort */ }
+    return `Tell the user, briefly: the active project directory is ${proj} and memories are stored at ${mp}.`;
+  }
+
+  if (cmd.kind === "clear") {
+    state.projectDirectory = null;
+    await savePersistedState(state);
+    try { ctl.createStatus({ status: "done", text: "Project cleared — open reads, global memory" }); } catch { /* best-effort */ }
+    return "Tell the user, briefly: the project directory has been cleared; reads are open and memory is global now.";
+  }
+
+  // set
+  const resolved = resolve(state.currentWorkingDirectory, cmd.path);
+  const protectedGlobs = buildProtectedGlobs(protectedPathsConfig);
+  if (isProtectedPath(resolved, protectedGlobs)) {
+    return `Tell the user the path '${resolved}' is a protected location and cannot be used as a project directory.`;
+  }
+  try {
+    const st = await stat(resolved);
+    if (!st.isDirectory()) return `Tell the user that '${resolved}' is not a directory, so the project was not changed.`;
+  } catch {
+    return `Tell the user that the directory '${resolved}' was not found, so the project was not changed.`;
+  }
+  state.projectDirectory = resolved;
+  state.currentWorkingDirectory = resolved;
+  await savePersistedState(state);
+  const mp = resolveMemoryPath(memoryScope, resolved, toolboxHome);
+  try {
+    await mkdir(dirname(mp), { recursive: true });
+    await access(mp).catch(async () => { await writeFile(mp, "# Memory\n", "utf-8"); });
+  } catch { /* best-effort */ }
+  try { ctl.createStatus({ status: "done", text: `Project set to ${resolved} — memory: ${mp}` }); } catch { /* best-effort */ }
+  return `Tell the user, briefly: the project directory is now ${resolved}; reads are confined there and memories are saved at ${mp}.`;
+}
+
 export async function promptPreprocessor(ctl: PromptPreprocessorController, userMessage: ChatMessage) {
   const userPrompt = userMessage.getText();
-  
+
+  // /project command: deterministic, no model involvement in the state change. Intercepted before any
+  // history/RAG processing so it never depends on document context or workflow routing.
+  const earlyConfig = ctl.getPluginConfig(pluginConfigSchematics);
+  const projCmd = parseProjectCommand(userPrompt);
+  if (projCmd.kind !== "none") {
+    return await handleProjectCommand(
+      ctl,
+      projCmd,
+      earlyConfig.get("defaultWorkspacePath"),
+      (earlyConfig.get("memoryScope") as MemoryScope) || "auto",
+      earlyConfig.get("protectedPaths"),
+    );
+  }
+
   // 1. RAG / Context Injection Logic
   const history = await ctl.pullHistory();
 
@@ -383,12 +454,28 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
         ctl.debug("No startup.md file found or failed to load.");
     }
 
+    // Deterministic always-on memory recall (code-owned memory.md), replacing reliance on
+    // startup.md → memory.md (which read from a CWD that could drift across projects).
+    try {
+      const memScope = (pluginConfig.get("memoryScope") as MemoryScope) || "auto";
+      const home = join(os.homedir(), ".beledarians-llm-toolbox");
+      const memPath = resolveMemoryPath(memScope, state.projectDirectory ?? null, home);
+      const memRaw = await readFile(memPath, "utf-8");
+      const rendered = renderForInjection(parseMemory(memRaw), { maxChars: 4000 });
+      if (rendered) injectionContent = `${rendered}\n\n---\n\n${injectionContent}`;
+    } catch (e) {
+      ctl.debug("No memory file to inject or failed to load.");
+    }
+
     currentContent = `${injectionContent}\n\n---\n\n${currentContent}`;
   }
 
-  // Ambient date (D3): prepend on EVERY turn so the model can anchor "next/latest/current" questions.
-  // Done last so it lands at the very top of the assembled context.
-  currentContent = currentDateLine(new Date()) + "\n\n" + currentContent;
+  // Ambient date (D3) + active project (if pinned): prepend on EVERY turn so the model can anchor
+  // "next/latest/current" questions and always knows its read/write boundary. Done last so it lands
+  // at the very top of the assembled context.
+  let ambientPrefix = currentDateLine(new Date());
+  if (state.projectDirectory) ambientPrefix += `\nActive project: ${state.projectDirectory}`;
+  currentContent = ambientPrefix + "\n\n" + currentContent;
 
   // Return the final content string if it changed, otherwise the original message
   // (The SDK expects a string to replace content, or the message object)
