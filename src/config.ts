@@ -231,4 +231,24 @@ export const pluginConfigSchematics = createConfigSchematics()
     displayName: "Embedding model (semantic routing / RAG)",
     subtitle: "Model identifier used for semantic routing and local RAG. Set this to an embedding model you have loaded in LM Studio (e.g. 'text-embedding-nomic-embed-text-v2-moe'). If it can't load, semantic routing falls back to keyword-only.",
   }, "nomic-ai/nomic-embed-text-v1.5-GGUF")
+
+  // ── Project Directory & Memory ────────────────────────────────────────────
+  .field("defaultProjectPath", "string", {
+    displayName: "Default Project Directory",
+    subtitle: "Optional. A folder to pin as the project root at startup: it becomes a hard read boundary and the anchor for that project's memory.md (.beledarian/memory.md). Supports %ENV% vars. Empty = no boundary, global memory. Override per-session with the /project command or set_project_directory tool.",
+  }, "")
+  .field("memoryScope", "string", {
+    displayName: "Memory Scope",
+    subtitle: "Where remembered facts are stored: 'auto' (project file when a project directory is set, else a global file), 'global' (always one shared file), or 'project'. Default 'auto'.",
+  }, "auto")
+  .field("memoryDedupeThreshold", "string", {
+    displayName: "Memory Dedupe Threshold (0–1)",
+    subtitle: "When saving a fact, if it is at least this similar (cosine) to an existing memory, that memory is UPDATED instead of adding a duplicate. Higher = stricter. Default 0.85.",
+  }, "0.85")
+  .field("memoryMaxEntries", "numeric", {
+    int: true,
+    min: 1,
+    displayName: "Memory Soft Cap (entries)",
+    subtitle: "Above this many memories, saves still succeed but return a warning suggesting review. No memory is ever silently dropped. Default 100.",
+  }, 100)
   .build();
