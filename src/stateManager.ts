@@ -75,6 +75,22 @@ export async function savePersistedState(state: PluginState) {
   }
 }
 
+/**
+ * Merge-safe state update: read the LATEST state from disk, apply only the fields the caller owns via
+ * `mutate`, then write. Prevents the lost-update bug where a long-lived in-memory snapshot writes stale
+ * fields (e.g. a tool saving its cached copy would revert the preprocessor's router-state updates).
+ * Every writer should use this instead of mutating a shared snapshot and calling savePersistedState.
+ */
+export async function updatePersistedState(
+  configuredWorkspacePath: string | undefined,
+  mutate: (state: PluginState) => void,
+): Promise<PluginState> {
+  const state = await getPersistedState(configuredWorkspacePath);
+  mutate(state);
+  await savePersistedState(state);
+  return state;
+}
+
 export async function ensureWorkspaceExists(path: string) {
   try {
     await mkdir(path, { recursive: true });

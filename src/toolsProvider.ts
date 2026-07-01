@@ -10,7 +10,7 @@ import { matchGlob } from "./glob";
 import { z } from "zod";
 import { pluginConfigSchematics } from "./config";
 import { findLMStudioHome } from "./findLMStudioHome";
-import { getPersistedState, savePersistedState, ensureWorkspaceExists } from "./stateManager";
+import { getPersistedState, updatePersistedState, ensureWorkspaceExists } from "./stateManager";
 import { executeBrowserActions } from "./browserActions";
 import { rankFuzzyMatches } from "./fuzzySearch";
 import { extractHandoffMessage } from "./handoffMessage";
@@ -180,9 +180,10 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
     if (!isWithinBoundary(projectDirectory, resolve(currentWorkingDirectory))) currentWorkingDirectory = projectDirectory;
     workspaceEstablished = true;
   }
-  fullState.projectDirectory = projectDirectory;
-  fullState.currentWorkingDirectory = currentWorkingDirectory;
-  await savePersistedState(fullState);
+  await updatePersistedState(defaultWorkspacePath, s => {
+    s.projectDirectory = projectDirectory;
+    s.currentWorkingDirectory = currentWorkingDirectory;
+  });
 
   // The /project command (handled in the prompt preprocessor) writes the active project + CWD to
   // .plugin_state.json. Re-read it so a mid-session switch takes effect on the next tool call.
@@ -228,8 +229,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         workspaceEstablished = true;
         if (root !== currentWorkingDirectory) {
           currentWorkingDirectory = root;
-          fullState.currentWorkingDirectory = root;
-          savePersistedState(fullState).catch(() => { /* best-effort */ });
+          updatePersistedState(defaultWorkspacePath, s => { s.currentWorkingDirectory = root; }).catch(() => { /* best-effort */ });
         }
       }
       return resolved;
@@ -271,8 +271,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
   // Ensure the directory exists (idempotent)
   if (!isWorkspaceInitialized) {
     await ensureWorkspaceExists(currentWorkingDirectory);
-    fullState.currentWorkingDirectory = currentWorkingDirectory;
-    await savePersistedState(fullState);
+    await updatePersistedState(defaultWorkspacePath, s => { s.currentWorkingDirectory = currentWorkingDirectory; });
     console.log(`Working directory set to: ${currentWorkingDirectory}`);
     isWorkspaceInitialized = true;
   }
@@ -281,8 +280,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
   // synchronously at the next startup — no message required.
   const uiLanguageOverride = pluginConfig.get("uiLanguageOverride");
   if (fullState.uiLanguageOverride !== uiLanguageOverride) {
-    fullState.uiLanguageOverride = uiLanguageOverride;
-    await savePersistedState(fullState);
+    await updatePersistedState(defaultWorkspacePath, s => { s.uiLanguageOverride = uiLanguageOverride; });
     console.log(`[i18n] uiLanguageOverride persisted: "${uiLanguageOverride}". Restart plugin to apply.`);
   }
 
@@ -643,9 +641,8 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       }
       currentWorkingDirectory = newPath;
       workspaceEstablished = true; // explicit set — subsequent reads won't auto-relocate the write-root
-      // Persist the new state
-      fullState.currentWorkingDirectory = currentWorkingDirectory;
-      await savePersistedState(fullState);
+      // Persist the new state (merge — don't clobber router/other fields)
+      await updatePersistedState(defaultWorkspacePath, s => { s.currentWorkingDirectory = currentWorkingDirectory; });
 
       return {
         previous_directory: resolve(newPath, ".."),
@@ -682,8 +679,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       const raw = (directory ?? "").trim();
       if (!raw) {
         projectDirectory = null;
-        fullState.projectDirectory = null;
-        await savePersistedState(fullState);
+        await updatePersistedState(defaultWorkspacePath, s => { s.projectDirectory = null; });
         return { success: true, project_directory: null, message: "Project directory cleared. Reads are open; memory is global." };
       }
       const resolved = resolve(currentWorkingDirectory, raw);
@@ -697,9 +693,10 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
       projectDirectory = resolved;
       currentWorkingDirectory = resolved;
       workspaceEstablished = true;
-      fullState.projectDirectory = resolved;
-      fullState.currentWorkingDirectory = resolved;
-      await savePersistedState(fullState);
+      await updatePersistedState(defaultWorkspacePath, s => {
+        s.projectDirectory = resolved;
+        s.currentWorkingDirectory = resolved;
+      });
       // Stub the project memory file so recall has an anchor and the user can see it exists.
       const memoryPath = resolveMemoryPath(memoryScope, projectDirectory, toolboxHome);
       try { await mkdir(dirname(memoryPath), { recursive: true }); if (!existsSync(memoryPath)) await writeFile(memoryPath, "# Memory\n", "utf-8"); } catch { /* best-effort */ }
